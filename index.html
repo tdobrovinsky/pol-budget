@@ -525,7 +525,7 @@ function perLabel() {
   return settings.rateType === 'hourly' ? 'per hour' : settings.rateType === 'monthly' ? 'per month' : 'per day';
 }
 function maxUnitsPerWeek() {
-  return settings.rateType === 'hourly' ? 40 : 5;
+  return settings.rateType === 'hourly' ? 168 : 7;
 }
 function calcGross() {
   if (settings.rateType === 'monthly') return settings.rate;
