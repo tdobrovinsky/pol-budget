@@ -1,0 +1,11 @@
+# Internal Cowork files — not needed in the repo
+CLAUDE.md
+TASKS.md
+dashboard.html
+memory/
+
+# Keep these:
+# index.html       ← the app (auto-deployed to Netlify)
+# budget.html      ← local working copy
+# supabase-setup.sql
+# DEPLOY.md
