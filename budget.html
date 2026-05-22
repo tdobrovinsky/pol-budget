@@ -566,6 +566,34 @@ async function handlePasswordReset() {
   }
 }
 
+function bootApp(user) {
+  currentUser = user;
+  try { document.getElementById('userEmail').textContent = user.email; } catch(e) {}
+  // Always hide the overlay first, then load data — so login never stays stuck
+  document.getElementById('authOverlay').style.display = 'none';
+  document.getElementById('authSubmitBtn').disabled = false;
+  document.getElementById('authSubmitBtn').textContent = 'Sign In';
+  // Load cloud data with a timeout fallback — if it fails, just use localStorage
+  const cloudLoad = loadFromCloud().catch(err => console.warn('[Auth] Cloud load failed, using local data:', err));
+  const cloudTimeout = new Promise(resolve => setTimeout(resolve, 8000));
+  Promise.race([cloudLoad, cloudTimeout]).then(() => {
+    settings = loadSettings();
+    state = loadState();
+    transactions = loadTransactions();
+    trackedCategories = loadCategories();
+    updateCategoryDropdown();
+    render();
+  }).catch(err => {
+    console.warn('[Auth] Boot error, falling back to local data:', err);
+    settings = loadSettings();
+    state = loadState();
+    transactions = loadTransactions();
+    trackedCategories = loadCategories();
+    updateCategoryDropdown();
+    render();
+  });
+}
+
 async function initAuth() {
   sb.auth.onAuthStateChange(async (event, session) => {
     if (event === 'PASSWORD_RECOVERY') {
@@ -573,21 +601,17 @@ async function initAuth() {
       return;
     }
     if (session?.user) {
-      currentUser = session.user;
-      document.getElementById('userEmail').textContent = currentUser.email;
-      await loadFromCloud();
-      settings = loadSettings();
-      state = loadState();
-      transactions = loadTransactions();
-      trackedCategories = loadCategories();
-      document.getElementById('authOverlay').style.display = 'none';
-      updateCategoryDropdown();
-      render();
+      bootApp(session.user);
     }
   });
   // Check existing session on load
-  const { data: { session } } = await sb.auth.getSession();
-  if (!session) {
+  try {
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) {
+      document.getElementById('authOverlay').style.display = 'flex';
+    }
+  } catch(e) {
+    console.warn('[Auth] getSession failed:', e);
     document.getElementById('authOverlay').style.display = 'flex';
   }
 }
