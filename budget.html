@@ -1257,9 +1257,9 @@ function buildRecs(c) {
 
 initAuth(); // Supabase handles session check → loads data → calls render()
 
-// Register service worker for PWA
+// Unregister any existing service workers (they can interfere with auth)
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('/sw.js').catch(() => {});
+  navigator.serviceWorker.getRegistrations().then(regs => regs.forEach(r => r.unregister()));
 }
 </script>
 </body>
