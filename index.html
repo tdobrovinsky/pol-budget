@@ -727,7 +727,7 @@ function calc() {
 
 function fmt(n) {
   const abs = Math.abs(n);
-  return '$' + abs.toLocaleString('en-CA', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  return '$' + abs.toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 function esc(s) {
