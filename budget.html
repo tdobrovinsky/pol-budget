@@ -367,6 +367,27 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
     </div>
     <button class="auth-submit" id="authSubmitBtn" onclick="handleAuthSubmit()">Sign In</button>
     <div class="auth-msg" id="authMsg"></div>
+
+    <!-- Password Reset Panel (shown instead of sign-in when recovery link is clicked) -->
+    <div id="resetPanel" style="display:none;">
+      <div style="text-align:center;margin-bottom:20px;">
+        <div style="font-size:36px;margin-bottom:8px;">🔑</div>
+        <div style="font-size:17px;font-weight:700;color:#1e293b;margin-bottom:4px;">Set a new password</div>
+        <div style="font-size:13px;color:#64748b;">Choose a new password for your account.</div>
+      </div>
+      <div class="auth-field">
+        <label>New Password</label>
+        <input type="password" id="resetPassword" placeholder="At least 6 characters" autocomplete="new-password"
+          onkeydown="if(event.key==='Enter')document.getElementById('resetPassword2').focus()">
+      </div>
+      <div class="auth-field">
+        <label>Confirm New Password</label>
+        <input type="password" id="resetPassword2" placeholder="Repeat password" autocomplete="new-password"
+          onkeydown="if(event.key==='Enter')handlePasswordReset()">
+      </div>
+      <button class="auth-submit" id="resetSubmitBtn" onclick="handlePasswordReset()">Set New Password</button>
+      <div class="auth-msg" id="resetMsg"></div>
+    </div>
   </div>
 </div>
 
@@ -486,8 +507,49 @@ async function syncToCloud(key, value) {
   ).then(); // fire-and-forget — localStorage already updated for instant UI
 }
 
+function showResetPanel() {
+  // Hide normal sign-in UI, show reset panel
+  document.getElementById('authTabSignin').style.display = 'none';
+  document.getElementById('authTabSignup').style.display = 'none';
+  document.getElementById('authBanner').style.display = 'none';
+  document.getElementById('authEmail').closest('.auth-field').style.display = 'none';
+  document.getElementById('authPassword').closest('.auth-field').style.display = 'none';
+  document.getElementById('authSubmitBtn').style.display = 'none';
+  document.getElementById('authMsg').style.display = 'none';
+  document.getElementById('resetPanel').style.display = 'block';
+  document.getElementById('authOverlay').style.display = 'flex';
+}
+
+async function handlePasswordReset() {
+  const p1 = document.getElementById('resetPassword').value;
+  const p2 = document.getElementById('resetPassword2').value;
+  const msgEl = document.getElementById('resetMsg');
+  const btn = document.getElementById('resetSubmitBtn');
+
+  if (p1.length < 6) { msgEl.textContent = 'Password must be at least 6 characters.'; msgEl.className = 'auth-msg error'; return; }
+  if (p1 !== p2) { msgEl.textContent = 'Passwords do not match.'; msgEl.className = 'auth-msg error'; return; }
+
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+  const { error } = await sb.auth.updateUser({ password: p1 });
+  if (error) {
+    msgEl.textContent = error.message;
+    msgEl.className = 'auth-msg error';
+    btn.disabled = false;
+    btn.textContent = 'Set New Password';
+  } else {
+    msgEl.textContent = '✅ Password updated! Signing you in…';
+    msgEl.className = 'auth-msg success';
+    // onAuthStateChange will fire and hide the overlay automatically
+  }
+}
+
 async function initAuth() {
   sb.auth.onAuthStateChange(async (event, session) => {
+    if (event === 'PASSWORD_RECOVERY') {
+      showResetPanel();
+      return;
+    }
     if (session?.user) {
       currentUser = session.user;
       document.getElementById('userEmail').textContent = currentUser.email;
