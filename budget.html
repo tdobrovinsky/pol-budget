@@ -126,6 +126,12 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .rate-type-btn { flex: 1; padding: 8px 0; border: 1.5px solid #e2e8f0; background: white; color: #64748b; border-radius: 7px; cursor: pointer; font-size: 13px; font-weight: 500; transition: all 0.15s; }
 .rate-type-btn:hover { border-color: #3b82f6; color: #1e40af; background: #eff6ff; }
 .rate-type-btn.active { border-color: #1e40af; background: #1e40af; color: white; font-weight: 600; }
+.dow-btn { flex: 1; padding: 7px 0; border: 1.5px solid #e2e8f0; background: white; color: #64748b; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 500; transition: all 0.15s; }
+.dow-btn:hover { border-color: #3b82f6; color: #1e40af; background: #eff6ff; }
+.dow-btn.active { border-color: #1e40af; background: #1e40af; color: white; font-weight: 600; }
+.semi-input { width: 70px; padding: 8px 10px; border: 1.5px solid #e2e8f0; border-radius: 8px; font-size: 15px; text-align: center; }
+.semi-input:focus { outline: none; border-color: #3b82f6; }
+.modal-scroll { max-height: 85vh; overflow-y: auto; }
 .btn { padding: 10px 20px; border-radius: 8px; font-size: 14px; font-weight: 500; cursor: pointer; }
 .btn-cancel { border: 1.5px solid #e2e8f0; background: white; color: #475569; }
 .btn-cancel:hover { background: #f8fafc; }
@@ -247,17 +253,19 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
       <div id="weeklyRows"></div>
       <div class="income-box" style="margin-top:14px;">
         <div class="income-row">
-          <span class="ilabel">Gross Income</span>
+          <span class="ilabel" id="grossIncomeLbl">Gross Income</span>
           <span class="ivalue main" id="grossIncome">$0</span>
         </div>
-        <div class="income-divider"></div>
-        <div class="income-row">
-          <span class="ilabel">+ HST Collected <span style="font-size:11px;color:#94a3b8">(for CRA — not yours)</span></span>
-          <span class="ivalue hst" id="hstCollected">$0</span>
-        </div>
-        <div class="income-row">
-          <span class="ilabel">= Total Invoice to Client</span>
-          <span class="ivalue" style="color:#475569;font-size:14px;" id="totalInvoice">$0</span>
+        <div id="hstSummaryWrap">
+          <div class="income-divider"></div>
+          <div class="income-row">
+            <span class="ilabel">+ HST Collected <span style="font-size:11px;color:#94a3b8">(for CRA — not yours)</span></span>
+            <span class="ivalue hst" id="hstCollected">$0</span>
+          </div>
+          <div class="income-row">
+            <span class="ilabel">= Total Invoice to Client</span>
+            <span class="ivalue" style="color:#475569;font-size:14px;" id="totalInvoice">$0</span>
+          </div>
         </div>
       </div>
     </div>
@@ -399,30 +407,96 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 
 <!-- Settings Modal -->
 <div class="modal-overlay" id="settingsModal">
-  <div class="modal">
+  <div class="modal modal-scroll">
     <h2>⚙ Settings</h2>
+
     <div class="field">
-      <label>Rate Type</label>
+      <label>Employment Type</label>
       <div style="display:flex;gap:8px;margin-top:2px;">
-        <button class="rate-type-btn" id="rt-daily"   onclick="selectRateType('daily')">Daily</button>
-        <button class="rate-type-btn" id="rt-hourly"  onclick="selectRateType('hourly')">Hourly</button>
-        <button class="rate-type-btn" id="rt-monthly" onclick="selectRateType('monthly')">Monthly</button>
+        <button class="rate-type-btn" id="et-contractor" onclick="selectEmploymentType('contractor')">Contractor</button>
+        <button class="rate-type-btn" id="et-salaried"   onclick="selectEmploymentType('salaried')">Salaried (FTE)</button>
+      </div>
+      <div class="hint" id="et-hint">Contractor: invoices client + HST, sets aside taxes. Salaried: receives net (after-tax) paycheques.</div>
+    </div>
+
+    <!-- Contractor-only fields -->
+    <div id="contractorFields">
+      <div class="field">
+        <label>Rate Type</label>
+        <div style="display:flex;gap:8px;margin-top:2px;">
+          <button class="rate-type-btn" id="rt-daily"   onclick="selectRateType('daily')">Daily</button>
+          <button class="rate-type-btn" id="rt-hourly"  onclick="selectRateType('hourly')">Hourly</button>
+          <button class="rate-type-btn" id="rt-monthly" onclick="selectRateType('monthly')">Monthly</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>Rate (CAD $) — <span id="s-rateLabel">per day</span></label>
+        <input type="number" id="s-rate" value="325" min="0">
+      </div>
+      <div class="field">
+        <label>HST Rate (%)</label>
+        <input type="number" id="s-hstRate" value="13" min="0" max="20" step="0.1">
+        <div class="hint">Ontario standard is 13%. Only change if in a different province.</div>
+      </div>
+      <div class="field">
+        <label>Tax Reserve (%)</label>
+        <input type="number" id="s-taxRate" value="25" min="0" max="60" step="1">
+        <div class="hint">Set aside this % of gross income for corporate + personal income taxes. 25–30% is typical for Ontario contractors.</div>
       </div>
     </div>
-    <div class="field">
-      <label>Rate (CAD $) — <span id="s-rateLabel">per day</span></label>
-      <input type="number" id="s-rate" value="325" min="0">
+
+    <!-- Salaried (FTE) fields -->
+    <div id="salariedFields" style="display:none;">
+      <div class="field">
+        <label>Pay per Cheque (CAD $, after tax)</label>
+        <input type="number" id="s-payAmount" value="0" min="0" step="0.01">
+        <div class="hint">The net amount deposited each pay period.</div>
+      </div>
+      <div class="field">
+        <label>Pay Frequency</label>
+        <div style="display:flex;gap:6px;margin-top:2px;flex-wrap:wrap;">
+          <button class="rate-type-btn" id="pf-weekly"       onclick="selectPayFreq('weekly')">Weekly</button>
+          <button class="rate-type-btn" id="pf-bi-weekly"    onclick="selectPayFreq('bi-weekly')">Bi-weekly</button>
+          <button class="rate-type-btn" id="pf-semi-monthly" onclick="selectPayFreq('semi-monthly')">Semi-monthly</button>
+          <button class="rate-type-btn" id="pf-monthly"      onclick="selectPayFreq('monthly')">Monthly</button>
+        </div>
+      </div>
+
+      <!-- Schedule sub-fields per frequency -->
+      <div class="field" id="payDowField" style="display:none;">
+        <label>Pay Day of the Week</label>
+        <div style="display:flex;gap:5px;margin-top:2px;">
+          <button class="dow-btn" data-dow="1" onclick="selectPayDow(1)">Mon</button>
+          <button class="dow-btn" data-dow="2" onclick="selectPayDow(2)">Tue</button>
+          <button class="dow-btn" data-dow="3" onclick="selectPayDow(3)">Wed</button>
+          <button class="dow-btn" data-dow="4" onclick="selectPayDow(4)">Thu</button>
+          <button class="dow-btn" data-dow="5" onclick="selectPayDow(5)">Fri</button>
+        </div>
+      </div>
+
+      <div class="field" id="payAnchorField" style="display:none;">
+        <label>Reference Payday</label>
+        <input type="date" id="s-payAnchor">
+        <div class="hint">Pick any known payday (past or future). The app will compute all paydays every 2 weeks from this date.</div>
+      </div>
+
+      <div class="field" id="paySemiField" style="display:none;">
+        <label>Pay Dates (day of month)</label>
+        <div style="display:flex;gap:10px;align-items:center;margin-top:2px;">
+          <input type="number" class="semi-input" id="s-semiDay1" min="1" max="31" value="15">
+          <span style="color:#94a3b8;">&amp;</span>
+          <input type="number" class="semi-input" id="s-semiDay2" min="1" max="31" value="30">
+        </div>
+        <div class="hint">Use 30 or 31 for "last day of month" (auto-adjusts for shorter months).</div>
+      </div>
+
+      <div class="field" id="payMonthlyField" style="display:none;">
+        <label>Pay Date (day of month)</label>
+        <input type="number" class="semi-input" id="s-monthlyDay" min="1" max="31" value="15" style="width:90px;">
+        <div class="hint">Use 30 or 31 for "last day of month" (auto-adjusts for shorter months).</div>
+      </div>
     </div>
-    <div class="field">
-      <label>HST Rate (%)</label>
-      <input type="number" id="s-hstRate" value="13" min="0" max="20" step="0.1">
-      <div class="hint">Ontario standard is 13%. Only change if in a different province.</div>
-    </div>
-    <div class="field">
-      <label>Tax Reserve (%)</label>
-      <input type="number" id="s-taxRate" value="25" min="0" max="60" step="1">
-      <div class="hint">Set aside this % of gross income for corporate + personal income taxes. 25–30% is typical for Ontario contractors.</div>
-    </div>
+
     <div class="modal-actions">
       <button class="btn btn-cancel" onclick="closeSettings()">Cancel</button>
       <button class="btn btn-save" onclick="applySettings()">Save Settings</button>
@@ -648,7 +722,26 @@ const SETTINGS_KEY = 'budget_settings_v1';
 const TX_KEY = 'budget_transactions';
 const CAT_KEY  = 'budget_categories_v1';
 
-function defaultSettings() { return { rateType: 'daily', rate: 325, hstRate: 13, taxReserveRate: 25 }; }
+function defaultSettings() {
+  return {
+    employmentType: 'contractor',  // 'contractor' | 'salaried'
+    // Contractor fields
+    rateType: 'daily',
+    rate: 325,
+    hstRate: 13,
+    taxReserveRate: 25,
+    // Salaried (FTE) fields
+    payAmount: 0,
+    payFrequency: 'bi-weekly',     // 'weekly' | 'bi-weekly' | 'semi-monthly' | 'monthly'
+    payDayOfWeek: 5,               // 1=Mon..5=Fri (for weekly)
+    payAnchorDate: '',             // YYYY-MM-DD (for bi-weekly)
+    paySemiDay1: 15,
+    paySemiDay2: 30,
+    payMonthlyDay: 15,
+  };
+}
+
+function isFTE() { return settings.employmentType === 'salaried'; }
 
 // Rate type helpers
 function unitLabel() {
@@ -661,24 +754,138 @@ function maxUnitsPerWeek() {
   return settings.rateType === 'hourly' ? 168 : 7;
 }
 function calcGross() {
+  if (isFTE()) {
+    // For FTE, "gross" in our model = total net paycheques this month (post-tax).
+    return getPaychecksForMonth(viewYear, viewMonth).reduce((s, p) => s + p.amount, 0);
+  }
   if (settings.rateType === 'monthly') return settings.rate;
   return totalDaysWorked() * settings.rate;
 }
 function selectRateType(type) {
   settings.rateType = type;
-  document.querySelectorAll('.rate-type-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('#contractorFields .rate-type-btn').forEach(b => b.classList.remove('active'));
   const btn = document.getElementById(`rt-${type}`);
   if (btn) btn.classList.add('active');
   const lbl = document.getElementById('s-rateLabel');
   if (lbl) lbl.textContent = perLabel();
-  // Hide/show weekly rows depending on type
+  // Hide/show weekly rows depending on type (contractor only)
   const weeklyCard = document.getElementById('weeklyCard');
-  if (weeklyCard) weeklyCard.style.display = type === 'monthly' ? 'none' : '';
+  if (weeklyCard && !isFTE()) weeklyCard.style.display = type === 'monthly' ? 'none' : '';
+}
+
+function selectEmploymentType(type) {
+  settings.employmentType = type;
+  document.getElementById('et-contractor').classList.toggle('active', type === 'contractor');
+  document.getElementById('et-salaried'  ).classList.toggle('active', type === 'salaried');
+  document.getElementById('contractorFields').style.display = type === 'contractor' ? '' : 'none';
+  document.getElementById('salariedFields'  ).style.display = type === 'salaried'   ? '' : 'none';
+}
+
+function selectPayFreq(freq) {
+  settings.payFrequency = freq;
+  ['weekly','bi-weekly','semi-monthly','monthly'].forEach(f => {
+    const b = document.getElementById(`pf-${f}`);
+    if (b) b.classList.toggle('active', f === freq);
+  });
+  document.getElementById('payDowField'    ).style.display = freq === 'weekly'       ? '' : 'none';
+  document.getElementById('payAnchorField' ).style.display = freq === 'bi-weekly'    ? '' : 'none';
+  document.getElementById('paySemiField'   ).style.display = freq === 'semi-monthly' ? '' : 'none';
+  document.getElementById('payMonthlyField').style.display = freq === 'monthly'      ? '' : 'none';
+}
+
+function selectPayDow(dow) {
+  settings.payDayOfWeek = dow;
+  document.querySelectorAll('#payDowField .dow-btn').forEach(b => {
+    b.classList.toggle('active', parseInt(b.dataset.dow) === dow);
+  });
+}
+
+// ── Paycheque schedule for FTE ────────────────────────────────────────────────
+// Returns array of { date: 'YYYY-MM-DD', dateObj: Date, amount: number, label: string }
+// for the given viewed month, based on frequency + schedule settings.
+// Per-cheque overrides come from state.paychecks[date] when present.
+function clampDayToMonth(year, month, day) {
+  const lastDay = new Date(year, month + 1, 0).getDate();
+  // Guard against invalid input — clamp to [1, lastDay]
+  return Math.min(Math.max(1, day), lastDay);
+}
+function ymd(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${dd}`;
+}
+function getPaychecksForMonth(year, month) {
+  const result = [];
+  const overrides = (state && state.paychecks) || {};
+  const defaultAmt = parseFloat(settings.payAmount) || 0;
+  const push = (d) => {
+    const key = ymd(d);
+    const amt = overrides[key] !== undefined ? overrides[key] : defaultAmt;
+    result.push({ date: key, dateObj: new Date(d), amount: parseFloat(amt) || 0 });
+  };
+
+  const freq = settings.payFrequency || 'bi-weekly';
+  const firstOfMonth = new Date(year, month, 1);
+  const lastOfMonth  = new Date(year, month + 1, 0);
+
+  if (freq === 'monthly') {
+    const day = clampDayToMonth(year, month, parseInt(settings.payMonthlyDay) || 15);
+    push(new Date(year, month, day));
+  } else if (freq === 'semi-monthly') {
+    const days = [parseInt(settings.paySemiDay1) || 15, parseInt(settings.paySemiDay2) || 30];
+    days.sort((a, b) => a - b);
+    days.forEach(d => push(new Date(year, month, clampDayToMonth(year, month, d))));
+    // De-duplicate (in case both days clamp to same date)
+    const seen = new Set();
+    return result.filter(p => { if (seen.has(p.date)) return false; seen.add(p.date); return true; });
+  } else if (freq === 'weekly') {
+    const dow = parseInt(settings.payDayOfWeek) || 5; // 1=Mon..5=Fri (JS Sun=0..Sat=6)
+    let d = new Date(firstOfMonth);
+    // Advance to first matching weekday in month
+    while (d.getDay() !== dow && d <= lastOfMonth) d.setDate(d.getDate() + 1);
+    while (d <= lastOfMonth) { push(new Date(d)); d.setDate(d.getDate() + 7); }
+  } else { // bi-weekly
+    const anchorStr = settings.payAnchorDate;
+    if (!anchorStr) return result;
+    const [ay, am, ad] = anchorStr.split('-').map(Number);
+    const anchor = new Date(ay, am - 1, ad);
+    if (isNaN(anchor.getTime())) return result;
+    // Find first payday on or after firstOfMonth
+    const msPerDay = 86400000;
+    const diffDays = Math.floor((firstOfMonth - anchor) / msPerDay);
+    // Number of 14-day periods to add to anchor to reach >= firstOfMonth
+    let k = Math.ceil(diffDays / 14);
+    let d = new Date(anchor);
+    d.setDate(d.getDate() + k * 14);
+    // If we overshot backward (diffDays negative), advance to month
+    while (d < firstOfMonth) d.setDate(d.getDate() + 14);
+    while (d <= lastOfMonth) { push(new Date(d)); d.setDate(d.getDate() + 14); }
+  }
+  return result;
+}
+
+function setPaycheckAmount(dateKey, val) {
+  if (!state.paychecks) state.paychecks = {};
+  state.paychecks[dateKey] = parseFloat(val) || 0;
+  persist();
+  renderCalc();
+  updatePaycheckTotals();
+}
+
+function resetPaycheckOverride(dateKey) {
+  if (state.paychecks && state.paychecks[dateKey] !== undefined) {
+    delete state.paychecks[dateKey];
+    persist();
+    renderPaycheckRows();
+    renderCalc();
+  }
 }
 
 function defaultState() {
   return {
-    weekDays: {},   // { weekIndex: daysWorked }
+    weekDays: {},   // { weekIndex: daysWorked }  — contractor
+    paychecks: {},  // { 'YYYY-MM-DD': amount }   — FTE per-cheque overrides
     fixed: [
       { id: 1, name: 'Rent', amount: 0 },
       { id: 2, name: 'Phone', amount: 0 },
@@ -758,10 +965,11 @@ function totalDaysWorked() {
 function calc() {
   const { hstRate, taxReserveRate } = settings;
   const gross = calcGross();
-  const hst = gross * (hstRate / 100);
-  const totalInvoice = gross + hst;
-  const taxReserve = gross * (taxReserveRate / 100);
-  const afterTax = gross - taxReserve;
+  // FTE: salary is already net (post-tax). No HST collected, no reserve needed.
+  const hst         = isFTE() ? 0 : gross * (hstRate / 100);
+  const totalInvoice= isFTE() ? gross : gross + hst;
+  const taxReserve  = isFTE() ? 0 : gross * (taxReserveRate / 100);
+  const afterTax    = isFTE() ? gross : gross - taxReserve;
   const fixedTotal = state.fixed.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
   const trackedTotal = trackedCategories.reduce((s, cat) => s + txTotal(cat), 0);
   const manualTotal  = state.variable.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
@@ -872,18 +1080,102 @@ function setWeekDays(weekIdx, val) {
   renderCalc();
 }
 
+// ── Paycheque rows (FTE) ─────────────────────────────────────────────────────
+function renderPaycheckRows() {
+  const checks = getPaychecksForMonth(viewYear, viewMonth);
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const fmt2 = (d) => d.toLocaleDateString('en-CA', { weekday: 'short', month: 'short', day: 'numeric' });
+  const defaultAmt = parseFloat(settings.payAmount) || 0;
+  const overrides = state.paychecks || {};
+
+  let html = '';
+  if (checks.length === 0) {
+    html = `<div style="color:#94a3b8;font-size:13px;padding:10px 0;text-align:center;">
+      No paycheques scheduled. ${settings.payFrequency === 'bi-weekly' && !settings.payAnchorDate ? 'Set a "Reference Payday" in Settings.' : 'Check your pay frequency settings.'}
+    </div>`;
+  } else {
+    html = checks.map((p) => {
+      const isPast = p.dateObj < today;
+      const isToday = p.dateObj.getTime() === today.getTime();
+      const hasOverride = overrides[p.date] !== undefined;
+      const rowCls = !isPast && !isToday ? 'week-row future' : isToday ? 'week-row current' : 'week-row';
+      // When the user has explicitly overridden a paycheque, always show the
+      // override value — even 0 — so they don't mistake their entry for the
+      // default placeholder. Only fall back to placeholder display when there
+      // is no override at all.
+      const inputValue = hasOverride ? p.amount : (p.amount || '');
+      return `<div class="${rowCls}">
+        <div class="week-info">
+          <span class="week-num">${fmt2(p.dateObj)}</span>
+          ${isToday ? '<span class="week-badge">today</span>' : ''}
+          ${hasOverride ? `<span class="week-badge" style="background:#fef3c7;color:#a16207;cursor:pointer;" title="Click to reset to default" onclick="resetPaycheckOverride('${p.date}')">edited ↺</span>` : ''}
+        </div>
+        <div class="week-input-wrap">
+          <span class="week-input-label">$</span>
+          <input class="week-input" style="width:90px;text-align:right;" type="number" min="0" step="0.01"
+            value="${inputValue}" placeholder="${defaultAmt || '0'}"
+            oninput="setPaycheckAmount('${p.date}', this.value)">
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  const total = checks.reduce((s, p) => s + p.amount, 0);
+  html += `<div class="weeks-total-row">
+    <span class="weeks-total-lbl" id="paychecksTotalLbl">${checks.length} paycheque${checks.length !== 1 ? 's' : ''} this month</span>
+    <span class="weeks-total-val" id="paychecksTotalVal">${fmt(total)} net</span>
+  </div>`;
+
+  document.getElementById('weeklyRows').innerHTML = html;
+}
+
+function updatePaycheckTotals() {
+  const checks = getPaychecksForMonth(viewYear, viewMonth);
+  const total = checks.reduce((s, p) => s + p.amount, 0);
+  const lbl = document.getElementById('paychecksTotalLbl');
+  const val = document.getElementById('paychecksTotalVal');
+  if (lbl) lbl.textContent = `${checks.length} paycheque${checks.length !== 1 ? 's' : ''} this month`;
+  if (val) val.textContent = `${fmt(total)} net`;
+}
+
 // Updates all calculated outputs WITHOUT rebuilding the expense lists or week rows.
 // Call this when an amount changes so focused inputs don't lose focus.
 function renderCalc() {
   const c = calc();
+  const fte = isFTE();
 
-  // Income summary box
+  // Income summary box — labels differ for FTE vs contractor
+  const grossLblEl = document.getElementById('grossIncomeLbl');
+  if (grossLblEl) grossLblEl.textContent = fte ? 'Net Income (after tax)' : 'Gross Income';
   document.getElementById('grossIncome').textContent = fmt(c.gross);
-  document.getElementById('hstCollected').textContent = fmt(c.hst);
-  document.getElementById('totalInvoice').textContent = fmt(c.totalInvoice);
 
-  // Budget flow
-  document.getElementById('budgetFlow').innerHTML = `
+  // HST/invoice rows only relevant for contractor — hide for FTE
+  const hstWrap = document.getElementById('hstSummaryWrap');
+  if (hstWrap) hstWrap.style.display = fte ? 'none' : '';
+  if (!fte) {
+    document.getElementById('hstCollected').textContent = fmt(c.hst);
+    document.getElementById('totalInvoice').textContent = fmt(c.totalInvoice);
+  }
+
+  // Budget flow — FTE skips HST + Tax Reserve rows
+  const flowHTML = fte ? `
+    <div class="flow-subtotal flow-row">
+      <div class="flow-lbl">Net Income (after tax)</div>
+      <div class="flow-val green">${fmt(c.afterTax)}</div>
+    </div>
+    <div class="flow-row">
+      <div class="flow-lbl">Fixed Expenses</div>
+      <div class="flow-val red">– ${fmt(c.fixedTotal)}</div>
+    </div>
+    <div class="flow-row">
+      <div class="flow-lbl">Day-to-Day Spending</div>
+      <div class="flow-val red">– ${fmt(c.varTotal)}</div>
+    </div>
+    <div class="flow-result">
+      <div class="flow-lbl">Available to Save</div>
+      <div class="flow-val ${c.savings >= 0 ? 'positive' : 'negative'}">${c.savings < 0 ? '– ' : ''}${fmt(c.savings)}</div>
+    </div>
+  ` : `
     <div class="flow-row">
       <div class="flow-lbl">Gross Income (excl. HST)</div>
       <div class="flow-val green">${fmt(c.gross)}</div>
@@ -913,6 +1205,7 @@ function renderCalc() {
       <div class="flow-val ${c.savings >= 0 ? 'positive' : 'negative'}">${c.savings < 0 ? '– ' : ''}${fmt(c.savings)}</div>
     </div>
   `;
+  document.getElementById('budgetFlow').innerHTML = flowHTML;
 
   // Tracked rows + expense totals (don't touch the input-bearing lists)
   renderTrackedRows();
@@ -944,9 +1237,16 @@ function renderCalc() {
 function render() {
   migrateVariable();
   document.getElementById('monthLabel').textContent = `${MONTHS[viewMonth]} ${viewYear}`;
-  // Apply rate type state (button highlighting, weekly card visibility)
-  selectRateType(settings.rateType || 'daily');
-  if (settings.rateType !== 'monthly') renderWeeklyRows();
+  const weeklyCard = document.getElementById('weeklyCard');
+  if (isFTE()) {
+    // FTE: always show income card, render paycheque schedule
+    if (weeklyCard) weeklyCard.style.display = '';
+    renderPaycheckRows();
+  } else {
+    // Contractor: apply rate-type-specific behavior
+    selectRateType(settings.rateType || 'daily');
+    if (settings.rateType !== 'monthly') renderWeeklyRows();
+  }
   renderList('fixedList', state.fixed, 'fixed');
   renderList('variableList', state.variable, 'variable');
   renderCalc();
@@ -1178,9 +1478,21 @@ function changeMonth(delta) {
   if (currentView === 'spending') renderSpending();
 }
 
+// Snapshot of settings when modal is opened — restored on Cancel / click-outside
+// because selectEmploymentType/selectRateType/selectPayFreq/selectPayDow mutate
+// `settings` in-place to drive UI conditionals. Without this snapshot a Cancel
+// would leak interim button clicks into the saved app state.
+let settingsSnapshot = null;
+
 function openSettings() {
-  // Rate type buttons
-  document.querySelectorAll('.rate-type-btn').forEach(b => b.classList.remove('active'));
+  // Take a deep snapshot first so Cancel can fully revert
+  settingsSnapshot = JSON.parse(JSON.stringify(settings));
+
+  // Employment type
+  selectEmploymentType(settings.employmentType || 'contractor');
+
+  // Contractor: rate type buttons + values
+  document.querySelectorAll('#contractorFields .rate-type-btn').forEach(b => b.classList.remove('active'));
   const rateTypeBtn = document.getElementById(`rt-${settings.rateType || 'daily'}`);
   if (rateTypeBtn) rateTypeBtn.classList.add('active');
   const lbl = document.getElementById('s-rateLabel');
@@ -1188,20 +1500,56 @@ function openSettings() {
   document.getElementById('s-rate').value = settings.rate;
   document.getElementById('s-hstRate').value = settings.hstRate;
   document.getElementById('s-taxRate').value = settings.taxReserveRate;
+
+  // FTE: pay amount + frequency + schedule
+  document.getElementById('s-payAmount').value = settings.payAmount || 0;
+  selectPayFreq(settings.payFrequency || 'bi-weekly');
+  // Day-of-week buttons
+  document.querySelectorAll('#payDowField .dow-btn').forEach(b => {
+    b.classList.toggle('active', parseInt(b.dataset.dow) === (parseInt(settings.payDayOfWeek) || 5));
+  });
+  document.getElementById('s-payAnchor' ).value = settings.payAnchorDate || '';
+  document.getElementById('s-semiDay1'  ).value = settings.paySemiDay1 || 15;
+  document.getElementById('s-semiDay2'  ).value = settings.paySemiDay2 || 30;
+  document.getElementById('s-monthlyDay').value = settings.payMonthlyDay || 15;
+
   document.getElementById('settingsModal').classList.add('open');
 }
 function closeSettings() {
+  // Revert any interim mutations so Cancel/click-outside don't leak state
+  if (settingsSnapshot) {
+    settings = settingsSnapshot;
+    settingsSnapshot = null;
+    // Re-sync UI bits that selectRateType may have toggled in the main view
+    const weeklyCard = document.getElementById('weeklyCard');
+    if (weeklyCard) {
+      if (isFTE()) weeklyCard.style.display = '';
+      else weeklyCard.style.display = settings.rateType === 'monthly' ? 'none' : '';
+    }
+  }
   document.getElementById('settingsModal').classList.remove('open');
 }
 function applySettings() {
   settings = {
+    employmentType: settings.employmentType || 'contractor',
+    // Contractor
     rateType: settings.rateType || 'daily',
     rate: parseFloat(document.getElementById('s-rate').value) || 325,
     hstRate: parseFloat(document.getElementById('s-hstRate').value) || 13,
     taxReserveRate: parseFloat(document.getElementById('s-taxRate').value) || 25,
+    // FTE
+    payAmount: parseFloat(document.getElementById('s-payAmount').value) || 0,
+    payFrequency: settings.payFrequency || 'bi-weekly',
+    payDayOfWeek: parseInt(settings.payDayOfWeek) || 5,
+    payAnchorDate: document.getElementById('s-payAnchor').value || '',
+    paySemiDay1: parseInt(document.getElementById('s-semiDay1').value) || 15,
+    paySemiDay2: parseInt(document.getElementById('s-semiDay2').value) || 30,
+    payMonthlyDay: parseInt(document.getElementById('s-monthlyDay').value) || 15,
   };
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
   syncToCloud(SETTINGS_KEY, settings);
+  // Drop the snapshot so closeSettings() doesn't roll back the just-saved values
+  settingsSnapshot = null;
   closeSettings();
   render();
 }
@@ -1210,33 +1558,60 @@ document.getElementById('settingsModal').addEventListener('click', e => { if (e.
 function buildRecs(c) {
   const recs = [];
   const { gross, hst, taxReserve, afterTax, fixedTotal, varTotal, savings, savingsRate } = c;
+  const fte = isFTE();
 
   if (gross === 0) {
-    recs.push({ icon: '📅', text: 'Enter days worked for each week above to see your full budget breakdown and recommendations.' });
+    if (fte) {
+      const checks = getPaychecksForMonth(viewYear, viewMonth);
+      if (!settings.payAmount) {
+        recs.push({ icon: '💼', text: 'Enter your <strong>net pay per cheque</strong> in <strong>Settings</strong> to see your full budget breakdown.' });
+      } else if (checks.length === 0) {
+        recs.push({ icon: '📅', text: 'No paycheques scheduled for this month. Check your pay frequency and schedule in <strong>Settings</strong>.' });
+      } else {
+        recs.push({ icon: '💼', text: 'Adjust this month\'s paycheque amounts on the left to see your budget breakdown.' });
+      }
+    } else {
+      recs.push({ icon: '📅', text: 'Enter days worked for each week above to see your full budget breakdown and recommendations.' });
+    }
     return recs;
   }
 
-  // Savings rate
+  // Savings rate — phrasing differs by employment type
+  const incomeWord = fte ? 'net income' : 'gross income';
+  const targetIncome = fte ? afterTax : gross; // for FTE, target % is of net (which equals afterTax)
   if (savings < 0) {
     const shortfall = -savings;
-    recs.push({ icon: '🚨', text: `<strong>Over budget by ${fmt(shortfall)}.</strong> Your expenses exceed your after-tax income this month. Look at the largest expense categories for quick cuts, or check if this is an unusually slow month.` });
+    recs.push({ icon: '🚨', text: `<strong>Over budget by ${fmt(shortfall)}.</strong> Your expenses exceed your ${fte ? 'net' : 'after-tax'} income this month. Look at the largest expense categories for quick cuts.` });
   } else if (savingsRate < 10) {
-    recs.push({ icon: '⚠️', text: `Savings rate is <strong>${savingsRate.toFixed(1)}%</strong> — that's low. A healthy target is <strong>20% of gross income</strong> (${fmt(gross * 0.20)}/month). You're <strong>${fmt(gross * 0.20 - savings)}/month</strong> away from that goal.` });
+    recs.push({ icon: '⚠️', text: `Savings rate is <strong>${savingsRate.toFixed(1)}%</strong> — that's low. A healthy target is <strong>20% of ${incomeWord}</strong> (${fmt(targetIncome * 0.20)}/month). You're <strong>${fmt(targetIncome * 0.20 - savings)}/month</strong> away from that goal.` });
   } else if (savingsRate < 20) {
-    const gap = gross * 0.20 - savings;
-    recs.push({ icon: '👍', text: `Savings rate of <strong>${savingsRate.toFixed(1)}%</strong> — decent, but there's room to grow. Cutting <strong>${fmt(gap)}/month</strong> in expenses would get you to the 20% target (${fmt(gross * 0.20)}/month saved).` });
+    const gap = targetIncome * 0.20 - savings;
+    recs.push({ icon: '👍', text: `Savings rate of <strong>${savingsRate.toFixed(1)}%</strong> — decent, but there's room to grow. Cutting <strong>${fmt(gap)}/month</strong> in expenses would get you to the 20% target (${fmt(targetIncome * 0.20)}/month saved).` });
   } else {
     recs.push({ icon: '✅', text: `Excellent! Savings rate of <strong>${savingsRate.toFixed(1)}%</strong> puts you on track for <strong>${fmt(savings * 12)}/year</strong> in savings. Keep it up and consider opening a TFSA or RRSP if you haven't already.` });
   }
 
-  // HST reminder
-  recs.push({ icon: '🧾', text: `<strong>HST reminder:</strong> You collected <strong>${fmt(hst)}</strong> in HST this month — keep this in a separate account. It belongs to the CRA, not to you. Ontario contractors file HST <strong>quarterly</strong>; make sure the money doesn't get spent.` });
+  // Contractor-only: HST + tax reserve reminders
+  if (!fte) {
+    recs.push({ icon: '🧾', text: `<strong>HST reminder:</strong> You collected <strong>${fmt(hst)}</strong> in HST this month — keep this in a separate account. It belongs to the CRA, not to you. Ontario contractors file HST <strong>quarterly</strong>; make sure the money doesn't get spent.` });
 
-  // Tax reserve adequacy
-  if (settings.taxReserveRate < 25) {
-    recs.push({ icon: '📊', text: `Your tax reserve is set to <strong>${settings.taxReserveRate}%</strong>. For a contractor in Ontario, <strong>25–30%</strong> is the typical recommendation to cover both corporate and personal income taxes. Consider raising it in <strong>Settings</strong> — better to over-reserve than get a surprise bill from the CRA.` });
+    if (settings.taxReserveRate < 25) {
+      recs.push({ icon: '📊', text: `Your tax reserve is set to <strong>${settings.taxReserveRate}%</strong>. For a contractor in Ontario, <strong>25–30%</strong> is the typical recommendation to cover both corporate and personal income taxes. Consider raising it in <strong>Settings</strong> — better to over-reserve than get a surprise bill from the CRA.` });
+    } else {
+      recs.push({ icon: '📊', text: `Tax reserve: <strong>${fmt(taxReserve)}</strong> set aside this month at ${settings.taxReserveRate}%. That leaves <strong>${fmt(afterTax)}</strong> as your real spendable income. Good discipline — just make sure this money stays untouched until tax time.` });
+    }
   } else {
-    recs.push({ icon: '📊', text: `Tax reserve: <strong>${fmt(taxReserve)}</strong> set aside this month at ${settings.taxReserveRate}%. That leaves <strong>${fmt(afterTax)}</strong> as your real spendable income. Good discipline — just make sure this money stays untouched until tax time.` });
+    // FTE-specific reminder — also fires for monthly pay (1 cheque)
+    const checks = getPaychecksForMonth(viewYear, viewMonth);
+    if (checks.length >= 1) {
+      const chequeWord = checks.length === 1 ? 'paycheque' : 'paycheques';
+      recs.push({ icon: '💼', text: `<strong>${checks.length} ${chequeWord}</strong> totalling <strong>${fmt(gross)}</strong> this month. Since this is already net pay, no tax set-aside is needed — but consider auto-transferring savings on payday so it doesn't get spent.` });
+    }
+    // Extra-paycheque month tip for bi-weekly/weekly
+    if ((settings.payFrequency === 'bi-weekly' && checks.length === 3) ||
+        (settings.payFrequency === 'weekly' && checks.length === 5)) {
+      recs.push({ icon: '🎉', text: `This is a <strong>${checks.length}-paycheque month</strong> — a bonus cheque compared to most months. Great opportunity to put the extra one straight into savings.` });
+    }
   }
 
   // Largest expense spotlight
@@ -1249,30 +1624,32 @@ function buildRecs(c) {
     const top = allExp[0];
     const pct = ((top.amount / afterTax) * 100).toFixed(0);
     if (top.amount / afterTax > 0.30) {
-      recs.push({ icon: '💡', text: `Your biggest expense is <strong>${esc(top.name)}</strong> at <strong>${fmt(top.amount)}/month — ${pct}% of your after-tax income</strong>. If there's any flexibility here, even a small reduction would have a meaningful impact on savings.` });
+      recs.push({ icon: '💡', text: `Your biggest expense is <strong>${esc(top.name)}</strong> at <strong>${fmt(top.amount)}/month — ${pct}% of your ${fte ? 'net' : 'after-tax'} income</strong>. If there's any flexibility here, even a small reduction would have a meaningful impact on savings.` });
     }
   }
 
   // Variable cut to hit 20%
   if (varTotal > 0 && savingsRate < 20) {
-    const needed = gross * 0.20 - savings;
+    const needed = targetIncome * 0.20 - savings;
     if (needed > 0 && needed <= varTotal) {
       const cutPct = ((needed / varTotal) * 100).toFixed(0);
       recs.push({ icon: '✂️', text: `To hit a 20% savings rate, reduce day-to-day spending by <strong>${fmt(needed)}/month</strong> — a <strong>${cutPct}% cut</strong> across your variable expenses. Start with dining out and entertainment, which are typically the most flexible.` });
     }
   }
 
-  // Slow month warning
-  const workedDays = totalDaysWorked();
-  if (workedDays > 0 && workedDays < 15) {
-    recs.push({ icon: '📉', text: `Only <strong>${workedDays} days</strong> worked this month — lighter than usual. Build a <strong>1–2 month buffer</strong> from stronger months so slow periods don't put you in the red.` });
+  // Slow month warning (contractor only — FTE income is steady)
+  if (!fte) {
+    const workedDays = totalDaysWorked();
+    if (workedDays > 0 && workedDays < 15) {
+      recs.push({ icon: '📉', text: `Only <strong>${workedDays} days</strong> worked this month — lighter than usual. Build a <strong>1–2 month buffer</strong> from stronger months so slow periods don't put you in the red.` });
+    }
   }
 
   // Fixed vs variable ratio
   if (fixedTotal > 0 && varTotal > 0 && afterTax > 0) {
     const fixedPct = ((fixedTotal / afterTax) * 100).toFixed(0);
     if (fixedTotal / afterTax > 0.60) {
-      recs.push({ icon: '🔒', text: `Fixed expenses consume <strong>${fixedPct}% of your after-tax income</strong>, leaving little flexibility. Over time, try to keep fixed costs below 50% so variable spending and savings have more room.` });
+      recs.push({ icon: '🔒', text: `Fixed expenses consume <strong>${fixedPct}% of your ${fte ? 'net' : 'after-tax'} income</strong>, leaving little flexibility. Over time, try to keep fixed costs below 50% so variable spending and savings have more room.` });
     }
   }
 

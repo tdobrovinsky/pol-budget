@@ -69,3 +69,34 @@ If email confirmation is on, they click the link in the email first.
 ## Custom domain (optional)
 
 Netlify lets you connect a custom domain (e.g. `budget.yourname.com`) for free if you own a domain. Go to Netlify → your site → **Domain settings**.
+
+---
+
+## Pushing updates (after first-time setup)
+
+The repo is connected to GitHub → Netlify for auto-deploy.
+
+1. Edit `budget.html` (the source of truth).
+2. Copy it to `index.html` (Netlify serves `index.html`):
+   ```
+   cp budget.html index.html
+   ```
+3. Commit and push:
+   ```
+   git add budget.html index.html
+   git commit -m "your message"
+   git push
+   ```
+4. Netlify rebuilds in ~30s. Hard-refresh the live app to see changes (Cmd-Shift-R on Mac).
+
+### If git complains about a stuck lock
+Sometimes the Cowork sandbox leaves a stale `.git/HEAD.lock` or `.git/index.lock`. Clear and retry from your own terminal:
+```
+cd ~/Documents/Claude/Projects/"Pol Budgeting"
+rm -f .git/HEAD.lock .git/index.lock
+```
+
+### Editing the deployed app's database / auth
+- DB tables live in Supabase → SQL Editor (`supabase-setup.sql` is the schema)
+- Auth users: Supabase → Authentication → Users
+- App URL whitelist: Supabase → Authentication → URL Configuration
