@@ -139,10 +139,28 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .btn-save:hover { background: #1d4ed8; }
 
 /* Tabs */
-.tab-bar { background: #1e3a8a; display: flex; padding: 0 24px; gap: 4px; }
-.tab { padding: 10px 20px; border: none; background: transparent; color: rgba(255,255,255,0.55); font-size: 14px; font-weight: 500; cursor: pointer; border-bottom: 2px solid transparent; transition: color 0.15s; }
-.tab:hover { color: rgba(255,255,255,0.85); }
-.tab.active { color: white; border-bottom-color: white; }
+.tab-bar { background: #1e3a8a; display: flex; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
+.tab { flex: 1; padding: 14px 8px 12px; border: none; background: transparent; color: rgba(255,255,255,0.5); cursor: pointer; border-bottom: 3px solid transparent; transition: all 0.18s; display: flex; flex-direction: column; align-items: center; gap: 5px; }
+.tab:hover { color: rgba(255,255,255,0.85); background: rgba(255,255,255,0.06); }
+.tab.active { color: white; border-bottom-color: white; background: rgba(255,255,255,0.1); }
+.tab-icon { font-size: 22px; line-height: 1; }
+.tab-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; }
+
+/* Settings view */
+.settings-view-inner { max-width: 620px; margin: 0 auto; padding: 24px 16px 40px; }
+.settings-card { background: white; border-radius: 12px; padding: 22px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); margin-bottom: 16px; }
+.settings-card h3 { font-size: 12px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 18px; }
+.settings-save-row { display: flex; justify-content: flex-end; padding-top: 4px; }
+
+/* Mobile: bottom tab bar */
+@media (max-width: 640px) {
+  .tab-bar { position: fixed; bottom: 0; left: 0; right: 0; top: auto; background: white; border-top: 1px solid #e2e8f0; box-shadow: 0 -2px 12px rgba(0,0,0,0.1); padding-bottom: env(safe-area-inset-bottom, 4px); z-index: 1000; }
+  .tab { color: #94a3b8; border-bottom: none; border-top: 3px solid transparent; padding-top: 10px; }
+  .tab:hover { background: #f8fafc; }
+  .tab.active { color: #1e40af; border-top-color: #1e40af; border-bottom: none; background: #f0f7ff; }
+  .tab-icon { font-size: 20px; }
+  body { padding-bottom: 72px; }
+}
 
 /* Tracked badge on variable items */
 .tracked-pill { font-size: 10px; font-weight: 600; background: #dbeafe; color: #1e40af; padding: 2px 7px; border-radius: 10px; margin-left: 6px; cursor: pointer; white-space: nowrap; }
@@ -231,7 +249,6 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
     <span class="month-label" id="monthLabel"></span>
     <button onclick="changeMonth(1)">›</button>
   </div>
-  <button class="settings-btn" onclick="openSettings()">⚙ Settings</button>
   <div style="display:flex;align-items:center;gap:10px;">
     <span class="user-info" id="userEmail"></span>
     <button class="signout-btn" onclick="handleSignOut()">Sign out</button>
@@ -239,8 +256,15 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 </div>
 
 <div class="tab-bar">
-  <button class="tab active" id="tab-budget" onclick="switchView('budget')">📊 Budget</button>
-  <button class="tab" id="tab-spending" onclick="switchView('spending')">🛒 Spending</button>
+  <button class="tab active" id="tab-budget" onclick="switchView('budget')">
+    <span class="tab-icon">📊</span><span class="tab-label">Budget</span>
+  </button>
+  <button class="tab" id="tab-spending" onclick="switchView('spending')">
+    <span class="tab-icon">💸</span><span class="tab-label">Spending</span>
+  </button>
+  <button class="tab" id="tab-settings" onclick="switchView('settings')">
+    <span class="tab-icon">⚙️</span><span class="tab-label">Settings</span>
+  </button>
 </div>
 
 <div id="budget-view">
@@ -355,6 +379,110 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 </div>
 </div><!-- /spending-view -->
 
+<!-- Settings View -->
+<div id="settings-view" style="display:none;">
+  <div class="settings-view-inner">
+
+    <div class="settings-card">
+      <h3>Employment Type</h3>
+      <div style="display:flex;gap:8px;margin-bottom:12px;">
+        <button class="rate-type-btn" id="et-contractor" onclick="selectEmploymentType('contractor')">Contractor</button>
+        <button class="rate-type-btn" id="et-salaried"   onclick="selectEmploymentType('salaried')">Salaried (FTE)</button>
+      </div>
+      <div class="hint" id="et-hint">Contractor: invoices client + HST, sets aside taxes. Salaried: receives net (after-tax) paycheques.</div>
+    </div>
+
+    <!-- Contractor-only fields -->
+    <div id="contractorFields">
+      <div class="settings-card">
+        <h3>Income</h3>
+        <div class="field">
+          <label>Rate Type</label>
+          <div style="display:flex;gap:8px;margin-top:2px;">
+            <button class="rate-type-btn" id="rt-daily"   onclick="selectRateType('daily')">Daily</button>
+            <button class="rate-type-btn" id="rt-hourly"  onclick="selectRateType('hourly')">Hourly</button>
+            <button class="rate-type-btn" id="rt-monthly" onclick="selectRateType('monthly')">Monthly</button>
+          </div>
+        </div>
+        <div class="field">
+          <label>Rate (CAD $) — <span id="s-rateLabel">per day</span></label>
+          <input type="number" id="s-rate" value="325" min="0">
+        </div>
+      </div>
+      <div class="settings-card">
+        <h3>Taxes</h3>
+        <div class="field">
+          <label>HST Rate (%)</label>
+          <input type="number" id="s-hstRate" value="13" min="0" max="20" step="0.1">
+          <div class="hint">Ontario standard is 13%. Only change if in a different province.</div>
+        </div>
+        <div class="field">
+          <label>Tax Reserve (%)</label>
+          <input type="number" id="s-taxRate" value="25" min="0" max="60" step="1">
+          <div class="hint">Set aside this % of gross income for corporate + personal income taxes. 25–30% is typical for Ontario contractors.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Salaried (FTE) fields -->
+    <div id="salariedFields" style="display:none;">
+      <div class="settings-card">
+        <h3>Paycheque</h3>
+        <div class="field">
+          <label>Pay per Cheque (CAD $, after tax)</label>
+          <input type="number" id="s-payAmount" value="0" min="0" step="0.01">
+          <div class="hint">The net amount deposited each pay period.</div>
+        </div>
+        <div class="field">
+          <label>Pay Frequency</label>
+          <div style="display:flex;gap:6px;margin-top:2px;flex-wrap:wrap;">
+            <button class="rate-type-btn" id="pf-weekly"       onclick="selectPayFreq('weekly')">Weekly</button>
+            <button class="rate-type-btn" id="pf-bi-weekly"    onclick="selectPayFreq('bi-weekly')">Bi-weekly</button>
+            <button class="rate-type-btn" id="pf-semi-monthly" onclick="selectPayFreq('semi-monthly')">Semi-monthly</button>
+            <button class="rate-type-btn" id="pf-monthly"      onclick="selectPayFreq('monthly')">Monthly</button>
+          </div>
+        </div>
+        <div class="field" id="payDowField" style="display:none;">
+          <label>Pay Day of the Week</label>
+          <div style="display:flex;gap:5px;margin-top:2px;">
+            <button class="dow-btn" data-dow="1" onclick="selectPayDow(1)">Mon</button>
+            <button class="dow-btn" data-dow="2" onclick="selectPayDow(2)">Tue</button>
+            <button class="dow-btn" data-dow="3" onclick="selectPayDow(3)">Wed</button>
+            <button class="dow-btn" data-dow="4" onclick="selectPayDow(4)">Thu</button>
+            <button class="dow-btn" data-dow="5" onclick="selectPayDow(5)">Fri</button>
+          </div>
+        </div>
+        <div class="field" id="payAnchorField" style="display:none;">
+          <label>Reference Payday</label>
+          <input type="date" id="s-payAnchor">
+          <div class="hint">Pick any known payday (past or future). The app will compute all paydays every 2 weeks from this date.</div>
+        </div>
+        <div class="field" id="paySemiField" style="display:none;">
+          <label>Pay Dates (day of month)</label>
+          <div style="display:flex;gap:10px;align-items:center;margin-top:2px;">
+            <input type="number" class="semi-input" id="s-semiDay1" min="1" max="31" value="15">
+            <span style="color:#94a3b8;">&amp;</span>
+            <input type="number" class="semi-input" id="s-semiDay2" min="1" max="31" value="30">
+          </div>
+          <div class="hint">Use 30 or 31 for "last day of month" (auto-adjusts for shorter months).</div>
+        </div>
+        <div class="field" id="payMonthlyField" style="display:none;">
+          <label>Pay Date (day of month)</label>
+          <input type="number" class="semi-input" id="s-monthlyDay" min="1" max="31" value="15" style="width:90px;">
+          <div class="hint">Use 30 or 31 for "last day of month" (auto-adjusts for shorter months).</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="settings-card">
+      <div class="settings-save-row">
+        <button class="btn btn-save" onclick="applySettings()">Save Settings</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
 <!-- Auth Overlay -->
 <div class="auth-overlay" id="authOverlay">
   <div class="auth-card">
@@ -405,104 +533,6 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
   </div>
 </div>
 
-<!-- Settings Modal -->
-<div class="modal-overlay" id="settingsModal">
-  <div class="modal modal-scroll">
-    <h2>⚙ Settings</h2>
-
-    <div class="field">
-      <label>Employment Type</label>
-      <div style="display:flex;gap:8px;margin-top:2px;">
-        <button class="rate-type-btn" id="et-contractor" onclick="selectEmploymentType('contractor')">Contractor</button>
-        <button class="rate-type-btn" id="et-salaried"   onclick="selectEmploymentType('salaried')">Salaried (FTE)</button>
-      </div>
-      <div class="hint" id="et-hint">Contractor: invoices client + HST, sets aside taxes. Salaried: receives net (after-tax) paycheques.</div>
-    </div>
-
-    <!-- Contractor-only fields -->
-    <div id="contractorFields">
-      <div class="field">
-        <label>Rate Type</label>
-        <div style="display:flex;gap:8px;margin-top:2px;">
-          <button class="rate-type-btn" id="rt-daily"   onclick="selectRateType('daily')">Daily</button>
-          <button class="rate-type-btn" id="rt-hourly"  onclick="selectRateType('hourly')">Hourly</button>
-          <button class="rate-type-btn" id="rt-monthly" onclick="selectRateType('monthly')">Monthly</button>
-        </div>
-      </div>
-      <div class="field">
-        <label>Rate (CAD $) — <span id="s-rateLabel">per day</span></label>
-        <input type="number" id="s-rate" value="325" min="0">
-      </div>
-      <div class="field">
-        <label>HST Rate (%)</label>
-        <input type="number" id="s-hstRate" value="13" min="0" max="20" step="0.1">
-        <div class="hint">Ontario standard is 13%. Only change if in a different province.</div>
-      </div>
-      <div class="field">
-        <label>Tax Reserve (%)</label>
-        <input type="number" id="s-taxRate" value="25" min="0" max="60" step="1">
-        <div class="hint">Set aside this % of gross income for corporate + personal income taxes. 25–30% is typical for Ontario contractors.</div>
-      </div>
-    </div>
-
-    <!-- Salaried (FTE) fields -->
-    <div id="salariedFields" style="display:none;">
-      <div class="field">
-        <label>Pay per Cheque (CAD $, after tax)</label>
-        <input type="number" id="s-payAmount" value="0" min="0" step="0.01">
-        <div class="hint">The net amount deposited each pay period.</div>
-      </div>
-      <div class="field">
-        <label>Pay Frequency</label>
-        <div style="display:flex;gap:6px;margin-top:2px;flex-wrap:wrap;">
-          <button class="rate-type-btn" id="pf-weekly"       onclick="selectPayFreq('weekly')">Weekly</button>
-          <button class="rate-type-btn" id="pf-bi-weekly"    onclick="selectPayFreq('bi-weekly')">Bi-weekly</button>
-          <button class="rate-type-btn" id="pf-semi-monthly" onclick="selectPayFreq('semi-monthly')">Semi-monthly</button>
-          <button class="rate-type-btn" id="pf-monthly"      onclick="selectPayFreq('monthly')">Monthly</button>
-        </div>
-      </div>
-
-      <!-- Schedule sub-fields per frequency -->
-      <div class="field" id="payDowField" style="display:none;">
-        <label>Pay Day of the Week</label>
-        <div style="display:flex;gap:5px;margin-top:2px;">
-          <button class="dow-btn" data-dow="1" onclick="selectPayDow(1)">Mon</button>
-          <button class="dow-btn" data-dow="2" onclick="selectPayDow(2)">Tue</button>
-          <button class="dow-btn" data-dow="3" onclick="selectPayDow(3)">Wed</button>
-          <button class="dow-btn" data-dow="4" onclick="selectPayDow(4)">Thu</button>
-          <button class="dow-btn" data-dow="5" onclick="selectPayDow(5)">Fri</button>
-        </div>
-      </div>
-
-      <div class="field" id="payAnchorField" style="display:none;">
-        <label>Reference Payday</label>
-        <input type="date" id="s-payAnchor">
-        <div class="hint">Pick any known payday (past or future). The app will compute all paydays every 2 weeks from this date.</div>
-      </div>
-
-      <div class="field" id="paySemiField" style="display:none;">
-        <label>Pay Dates (day of month)</label>
-        <div style="display:flex;gap:10px;align-items:center;margin-top:2px;">
-          <input type="number" class="semi-input" id="s-semiDay1" min="1" max="31" value="15">
-          <span style="color:#94a3b8;">&amp;</span>
-          <input type="number" class="semi-input" id="s-semiDay2" min="1" max="31" value="30">
-        </div>
-        <div class="hint">Use 30 or 31 for "last day of month" (auto-adjusts for shorter months).</div>
-      </div>
-
-      <div class="field" id="payMonthlyField" style="display:none;">
-        <label>Pay Date (day of month)</label>
-        <input type="number" class="semi-input" id="s-monthlyDay" min="1" max="31" value="15" style="width:90px;">
-        <div class="hint">Use 30 or 31 for "last day of month" (auto-adjusts for shorter months).</div>
-      </div>
-    </div>
-
-    <div class="modal-actions">
-      <button class="btn btn-cancel" onclick="closeSettings()">Cancel</button>
-      <button class="btn btn-save" onclick="applySettings()">Save Settings</button>
-    </div>
-  </div>
-</div>
 
 <script>
 // ── Supabase ──────────────────────────────────────────────────────────────────
@@ -1340,8 +1370,11 @@ function switchView(view) {
   currentView = view;
   document.getElementById('budget-view').style.display = view === 'budget' ? '' : 'none';
   document.getElementById('spending-view').style.display = view === 'spending' ? '' : 'none';
+  document.getElementById('settings-view').style.display = view === 'settings' ? '' : 'none';
   document.getElementById('tab-budget').classList.toggle('active', view === 'budget');
   document.getElementById('tab-spending').classList.toggle('active', view === 'spending');
+  document.getElementById('tab-settings').classList.toggle('active', view === 'settings');
+  if (view === 'settings') openSettings();
   if (view === 'spending') { updateCategoryDropdown(); renderSpending(); }
 }
 
@@ -1485,13 +1518,9 @@ function changeMonth(delta) {
 let settingsSnapshot = null;
 
 function openSettings() {
-  // Take a deep snapshot first so Cancel can fully revert
-  settingsSnapshot = JSON.parse(JSON.stringify(settings));
-
-  // Employment type
+  // Populate settings view fields from current settings
   selectEmploymentType(settings.employmentType || 'contractor');
 
-  // Contractor: rate type buttons + values
   document.querySelectorAll('#contractorFields .rate-type-btn').forEach(b => b.classList.remove('active'));
   const rateTypeBtn = document.getElementById(`rt-${settings.rateType || 'daily'}`);
   if (rateTypeBtn) rateTypeBtn.classList.add('active');
@@ -1501,10 +1530,8 @@ function openSettings() {
   document.getElementById('s-hstRate').value = settings.hstRate;
   document.getElementById('s-taxRate').value = settings.taxReserveRate;
 
-  // FTE: pay amount + frequency + schedule
   document.getElementById('s-payAmount').value = settings.payAmount || 0;
   selectPayFreq(settings.payFrequency || 'bi-weekly');
-  // Day-of-week buttons
   document.querySelectorAll('#payDowField .dow-btn').forEach(b => {
     b.classList.toggle('active', parseInt(b.dataset.dow) === (parseInt(settings.payDayOfWeek) || 5));
   });
@@ -1512,32 +1539,15 @@ function openSettings() {
   document.getElementById('s-semiDay1'  ).value = settings.paySemiDay1 || 15;
   document.getElementById('s-semiDay2'  ).value = settings.paySemiDay2 || 30;
   document.getElementById('s-monthlyDay').value = settings.payMonthlyDay || 15;
-
-  document.getElementById('settingsModal').classList.add('open');
 }
-function closeSettings() {
-  // Revert any interim mutations so Cancel/click-outside don't leak state
-  if (settingsSnapshot) {
-    settings = settingsSnapshot;
-    settingsSnapshot = null;
-    // Re-sync UI bits that selectRateType may have toggled in the main view
-    const weeklyCard = document.getElementById('weeklyCard');
-    if (weeklyCard) {
-      if (isFTE()) weeklyCard.style.display = '';
-      else weeklyCard.style.display = settings.rateType === 'monthly' ? 'none' : '';
-    }
-  }
-  document.getElementById('settingsModal').classList.remove('open');
-}
+function closeSettings() {} // No-op — settings is now a tab view, not a modal
 function applySettings() {
   settings = {
     employmentType: settings.employmentType || 'contractor',
-    // Contractor
     rateType: settings.rateType || 'daily',
     rate: parseFloat(document.getElementById('s-rate').value) || 325,
     hstRate: parseFloat(document.getElementById('s-hstRate').value) || 13,
     taxReserveRate: parseFloat(document.getElementById('s-taxRate').value) || 25,
-    // FTE
     payAmount: parseFloat(document.getElementById('s-payAmount').value) || 0,
     payFrequency: settings.payFrequency || 'bi-weekly',
     payDayOfWeek: parseInt(settings.payDayOfWeek) || 5,
@@ -1548,12 +1558,10 @@ function applySettings() {
   };
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
   syncToCloud(SETTINGS_KEY, settings);
-  // Drop the snapshot so closeSettings() doesn't roll back the just-saved values
-  settingsSnapshot = null;
-  closeSettings();
   render();
+  // Switch back to budget view after saving
+  switchView('budget');
 }
-document.getElementById('settingsModal').addEventListener('click', e => { if (e.target.id === 'settingsModal') closeSettings(); });
 
 function buildRecs(c) {
   const recs = [];
