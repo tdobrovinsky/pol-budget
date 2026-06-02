@@ -1555,10 +1555,13 @@ function renderSpending() {
     }
   }
 
-  // Category totals + management
-  const catHTML = trackedCategories.map(cat => {
+  // Category totals — same combined list as the dropdown
+  const varNames = (state?.variable || []).map(e => e.name.trim()).filter(n => n && !trackedCategories.includes(n));
+  const allCats = [...trackedCategories, ...varNames];
+  const catHTML = allCats.map(cat => {
     const catTx = monthTx.filter(t => t.category === cat);
     const total = catTx.reduce((s, t) => s + t.amount, 0);
+    const isTracked = trackedCategories.includes(cat);
     return `<div class="cat-row">
       <div style="flex:1;">
         <span class="cat-icon">${catIcon(cat)}</span>
@@ -1566,8 +1569,8 @@ function renderSpending() {
         <div class="cat-count" style="margin-top:2px;padding-left:28px;">${catTx.length} transaction${catTx.length !== 1 ? 's' : ''}</div>
       </div>
       <span class="cat-total" style="color:${catColor(cat)};margin-right:8px;">${fmt(total)}</span>
-      <button onclick="deleteCategory('${esc(cat)}')" title="Remove category"
-        style="background:none;border:none;color:#cbd5e1;font-size:18px;cursor:pointer;padding:2px 4px;line-height:1;flex-shrink:0;">×</button>
+      ${isTracked ? `<button onclick="deleteCategory('${esc(cat)}')" title="Remove category"
+        style="background:none;border:none;color:#cbd5e1;font-size:18px;cursor:pointer;padding:2px 4px;line-height:1;flex-shrink:0;">×</button>` : '<span style="width:24px;"></span>'}
     </div>`;
   }).join('');
 
