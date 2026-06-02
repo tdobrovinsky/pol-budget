@@ -685,6 +685,7 @@ function bootApp(user) {
     state = loadState();
     transactions = loadTransactions();
     trackedCategories = loadCategories();
+    trackedBudgets = loadTrackedBudgets();
     updateCategoryDropdown();
     render();
   }).catch(err => {
@@ -693,6 +694,7 @@ function bootApp(user) {
     state = loadState();
     transactions = loadTransactions();
     trackedCategories = loadCategories();
+    trackedBudgets = loadTrackedBudgets();
     updateCategoryDropdown();
     render();
   });
@@ -748,9 +750,10 @@ let viewYear = now.getFullYear();
 let currentView = 'budget';
 
 function monthKey() { return `budget_${viewYear}_${viewMonth}`; }
-const SETTINGS_KEY = 'budget_settings_v1';
-const TX_KEY = 'budget_transactions';
-const CAT_KEY  = 'budget_categories_v1';
+const SETTINGS_KEY  = 'budget_settings_v1';
+const TX_KEY        = 'budget_transactions';
+const CAT_KEY       = 'budget_categories_v1';
+const BUDGETS_KEY   = 'budget_tracked_budgets_v1'; // global — shared across all months
 
 function defaultSettings() {
   return {
@@ -965,15 +968,24 @@ function loadCategories() {
 }
 function saveCategories() { localStorage.setItem(CAT_KEY, JSON.stringify(trackedCategories)); syncToCloud(CAT_KEY, trackedCategories); }
 
+function loadTrackedBudgets() {
+  try { return JSON.parse(localStorage.getItem(BUDGETS_KEY)) || {}; }
+  catch { return {}; }
+}
+function saveTrackedBudgets() {
+  localStorage.setItem(BUDGETS_KEY, JSON.stringify(trackedBudgets));
+  syncToCloud(BUDGETS_KEY, trackedBudgets);
+}
+
 let settings = loadSettings();
 let state = loadState();
 let transactions = loadTransactions();
 let trackedCategories = loadCategories();
+let trackedBudgets = loadTrackedBudgets(); // global — persists across months
 
-// Migrate: strip any old tracked items that ended up in state.variable
-function migrateVariable() {
-  state.variable = state.variable.filter(e => !trackedCategories.includes(e.name));
-}
+// migrateVariable() previously removed tracked category names from state.variable,
+// but now variable items intentionally sync to trackedCategories — so migration is a no-op.
+function migrateVariable() {}
 
 function persist() {
   localStorage.setItem(monthKey(), JSON.stringify(state));
@@ -1001,7 +1013,11 @@ function calc() {
   const taxReserve  = isFTE() ? 0 : gross * (taxReserveRate / 100);
   const afterTax    = isFTE() ? gross : gross - taxReserve;
   const fixedTotal = state.fixed.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
-  const trackedTotal = trackedCategories.reduce((s, cat) => s + txTotal(cat), 0);
+  const trackedTotal = trackedCategories.reduce((s, cat) => {
+    const budgeted = parseFloat(trackedBudgets?.[cat]) || 0;
+    const actual   = txTotal(cat);
+    return s + (actual > 0 ? actual : budgeted);
+  }, 0);
   const manualTotal  = state.variable.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
   const varTotal = trackedTotal + manualTotal;
   const savings = afterTax - fixedTotal - varTotal;
@@ -1168,26 +1184,11 @@ function updatePaycheckTotals() {
   if (val) val.textContent = `${fmt(total)} net`;
 }
 
-// Updates all calculated outputs WITHOUT rebuilding the expense lists or week rows.
-// Call this when an amount changes so focused inputs don't lose focus.
-function renderCalc() {
-  const c = calc();
+// Renders only the budget flow panel and savings summary/recs — no rows rebuilt.
+// Used by updateTrackedBudget to avoid destroying the active tracked-row input.
+function renderBudgetFlow(c) {
+  if (!c) c = calc();
   const fte = isFTE();
-
-  // Income summary box — labels differ for FTE vs contractor
-  const grossLblEl = document.getElementById('grossIncomeLbl');
-  if (grossLblEl) grossLblEl.textContent = fte ? 'Net Income (after tax)' : 'Gross Income';
-  document.getElementById('grossIncome').textContent = fmt(c.gross);
-
-  // HST/invoice rows only relevant for contractor — hide for FTE
-  const hstWrap = document.getElementById('hstSummaryWrap');
-  if (hstWrap) hstWrap.style.display = fte ? 'none' : '';
-  if (!fte) {
-    document.getElementById('hstCollected').textContent = fmt(c.hst);
-    document.getElementById('totalInvoice').textContent = fmt(c.totalInvoice);
-  }
-
-  // Budget flow — FTE skips HST + Tax Reserve rows
   const flowHTML = fte ? `
     <div class="flow-subtotal flow-row">
       <div class="flow-lbl">Net Income (after tax)</div>
@@ -1236,17 +1237,9 @@ function renderCalc() {
     </div>
   `;
   document.getElementById('budgetFlow').innerHTML = flowHTML;
-
-  // Tracked rows + expense totals (don't touch the input-bearing lists)
-  renderTrackedRows();
-  document.getElementById('fixedTotal').textContent = fmt(c.fixedTotal);
-  document.getElementById('variableTotal').textContent = fmt(c.varTotal);
-
-  // Savings summary
   let rateClass = 'bad';
   if (c.savingsRate >= 20) rateClass = 'good';
   else if (c.savingsRate >= 10) rateClass = 'ok';
-
   document.getElementById('savingsSummary').innerHTML = `
     <div class="savings-big">
       <div class="savings-amount ${c.savings >= 0 ? 'pos' : 'neg'}">${c.savings < 0 ? '–' : ''}${fmt(c.savings)}</div>
@@ -1255,11 +1248,36 @@ function renderCalc() {
       ${c.savings > 0 ? `<div class="savings-annual">= ${fmt(c.savings * 12)} / year at this pace</div>` : ''}
     </div>
   `;
-
-  // Recommendations
   document.getElementById('recList').innerHTML = buildRecs(c).map(r =>
     `<li class="rec-item"><span class="rec-icon">${r.icon}</span><span class="rec-text">${r.text}</span></li>`
   ).join('');
+}
+
+// Updates all calculated outputs WITHOUT rebuilding the expense lists, week rows,
+// or tracked rows. Call this when an amount changes so focused inputs keep focus.
+function renderCalc() {
+  const c = calc();
+  const fte = isFTE();
+
+  // Income summary box — labels differ for FTE vs contractor
+  const grossLblEl = document.getElementById('grossIncomeLbl');
+  if (grossLblEl) grossLblEl.textContent = fte ? 'Net Income (after tax)' : 'Gross Income';
+  document.getElementById('grossIncome').textContent = fmt(c.gross);
+
+  // HST/invoice rows only relevant for contractor — hide for FTE
+  const hstWrap = document.getElementById('hstSummaryWrap');
+  if (hstWrap) hstWrap.style.display = fte ? 'none' : '';
+  if (!fte) {
+    document.getElementById('hstCollected').textContent = fmt(c.hst);
+    document.getElementById('totalInvoice').textContent = fmt(c.totalInvoice);
+  }
+
+  // Expense totals
+  document.getElementById('fixedTotal').textContent = fmt(c.fixedTotal);
+  document.getElementById('variableTotal').textContent = fmt(c.varTotal);
+
+  // Budget flow + savings + recommendations (shared with renderBudgetFlow)
+  renderBudgetFlow(c);
 }
 
 // Full render: rebuilds weekly rows + expense lists then updates all outputs.
@@ -1279,20 +1297,40 @@ function render() {
   }
   renderList('fixedList', state.fixed, 'fixed');
   renderList('variableList', state.variable, 'variable');
+  renderTrackedRows();
   renderCalc();
+}
+
+let _budgetFlowTimer = null;
+function updateTrackedBudget(cat, val) {
+  trackedBudgets[cat] = parseFloat(val) || 0;
+  saveTrackedBudgets();
+  // Immediately update the running total (textContent only — safe on mobile)
+  const c = calc();
+  document.getElementById('variableTotal').textContent = fmt(c.varTotal);
+  // Debounce the full budget flow update (innerHTML changes) so mobile keyboard
+  // doesn't dismiss mid-typing due to layout shifts
+  clearTimeout(_budgetFlowTimer);
+  _budgetFlowTimer = setTimeout(() => renderBudgetFlow(), 500);
 }
 
 function renderTrackedRows() {
   const el = document.getElementById('trackedRows');
   if (!el) return;
   el.innerHTML = trackedCategories.map(cat => {
-    const total = txTotal(cat);
+    const actual   = txTotal(cat);
+    const budgeted = trackedBudgets?.[cat] ?? '';
+    const actualNote = actual > 0
+      ? `<span style="font-size:11px;color:#6b7280;margin-left:4px;">(actual: ${fmt(actual)})</span>`
+      : '';
     return `<div class="exp-item" style="align-items:center;">
       <span style="font-size:15px;margin-right:4px;">${catIcon(cat)}</span>
       <span class="exp-name" style="flex:1;font-size:14px;color:#1e293b;padding:4px 2px;">${esc(cat)}</span>
-      <span class="tracked-pill" onclick="switchView('spending')" title="From Spending tracker — click to log">📊 tracked</span>
-      <span class="tracked-val">${fmt(total)}</span>
-      <span style="width:28px;"></span>
+      <span class="tracked-pill" onclick="switchView('spending')" title="Click to log spending">💸</span>
+      <span class="exp-symbol">$</span>
+      <input class="exp-amount" type="number" min="0" value="${actual > 0 ? actual : (budgeted || '')}" placeholder="0"
+        ${actual > 0 ? 'readonly style="background:#f8fafc;color:#6b7280;"' : ''}
+        oninput="updateTrackedBudget('${esc(cat)}', this.value)">
     </div>`;
   }).join('');
 }
@@ -1301,7 +1339,8 @@ function renderList(id, items, type) {
   document.getElementById(id).innerHTML = items.map((item, i) => `
     <li class="exp-item">
       <input class="exp-name" type="text" value="${esc(item.name)}" placeholder="Expense name"
-        onchange="updateItem('${type}', ${i}, 'name', this.value)">
+        oninput="updateItem('${type}', ${i}, 'name', this.value)"
+        onblur="syncItemNameToCategory('${type}', ${i})">
       <span class="exp-symbol">$</span>
       <input class="exp-amount" type="number" min="0" value="${item.amount || ''}" placeholder="0"
         oninput="updateItem('${type}', ${i}, 'amount', this.value); renderCalc()">
@@ -1312,9 +1351,27 @@ function renderList(id, items, type) {
 
 function updateItem(type, i, field, val) {
   const list = type === 'fixed' ? state.fixed : state.variable;
-  if (field === 'amount') list[i].amount = parseFloat(val) || 0;
-  else list[i].name = val;
+  if (field === 'amount') {
+    list[i].amount = parseFloat(val) || 0;
+  } else {
+    list[i].name = val; // Save name on every keystroke (prevents overwrite bug)
+  }
   persist();
+}
+
+// Called on blur — syncs the finalised name to trackedCategories for Spending tab.
+// Only ADDS names; never removes. Removals happen only in removeItem().
+// This prevents accidentally wiping categories added via the Spending tab.
+function syncItemNameToCategory(type, i) {
+  if (type !== 'variable') return;
+  const list = state.variable;
+  if (!list[i]) return;
+  const newName = list[i].name.trim();
+  if (newName && !trackedCategories.includes(newName)) {
+    trackedCategories.push(newName);
+    saveCategories();
+    updateCategoryDropdown();
+  }
 }
 
 function addExpense(type) {
@@ -1331,6 +1388,20 @@ function addExpense(type) {
 
 function removeItem(type, i) {
   const list = type === 'fixed' ? state.fixed : state.variable;
+  // Remove this item's name from trackedCategories only if:
+  // (a) it's not a default category, AND
+  // (b) no other variable item shares the same name
+  if (type === 'variable') {
+    const name = list[i].name.trim();
+    if (name && !DEFAULT_CATS.includes(name)) {
+      const otherHasName = list.some((e, j) => j !== i && e.name.trim() === name);
+      if (!otherHasName) {
+        trackedCategories = trackedCategories.filter(c => c !== name);
+        saveCategories();
+        updateCategoryDropdown();
+      }
+    }
+  }
   list.splice(i, 1);
   persist();
   render();
@@ -1343,7 +1414,8 @@ function addCategory(name) {
   saveCategories();
   updateCategoryDropdown();
   renderSpending();
-  renderCalc();  // update budget tracked rows + totals
+  renderTrackedRows(); // update Budget tab tracked rows
+  renderCalc();
 }
 
 function deleteCategory(name) {
@@ -1353,6 +1425,7 @@ function deleteCategory(name) {
   saveCategories();
   updateCategoryDropdown();
   renderSpending();
+  renderTrackedRows(); // update Budget tab tracked rows
   renderCalc();
 }
 
@@ -1510,12 +1583,6 @@ function changeMonth(delta) {
   render();
   if (currentView === 'spending') renderSpending();
 }
-
-// Snapshot of settings when modal is opened — restored on Cancel / click-outside
-// because selectEmploymentType/selectRateType/selectPayFreq/selectPayDow mutate
-// `settings` in-place to drive UI conditionals. Without this snapshot a Cancel
-// would leak interim button clicks into the saved app state.
-let settingsSnapshot = null;
 
 function openSettings() {
   // Populate settings view fields from current settings
