@@ -1314,23 +1314,44 @@ function updateTrackedBudget(cat, val) {
   _budgetFlowTimer = setTimeout(() => renderBudgetFlow(), 500);
 }
 
+function renameCategory(oldName, newName) {
+  newName = newName.trim();
+  if (!newName || newName === oldName) return;
+  if (trackedCategories.includes(newName)) {
+    // Name collision — revert to original
+    renderTrackedRows();
+    return;
+  }
+  const idx = trackedCategories.indexOf(oldName);
+  if (idx === -1) return;
+  trackedCategories[idx] = newName;
+  saveCategories();
+  // Move any budget amount to the new key
+  if (trackedBudgets[oldName] !== undefined) {
+    trackedBudgets[newName] = trackedBudgets[oldName];
+    delete trackedBudgets[oldName];
+    saveTrackedBudgets();
+  }
+  updateCategoryDropdown();
+  renderTrackedRows();
+  renderCalc();
+}
+
 function renderTrackedRows() {
   const el = document.getElementById('trackedRows');
   if (!el) return;
   el.innerHTML = trackedCategories.map(cat => {
     const actual   = txTotal(cat);
     const budgeted = trackedBudgets?.[cat] ?? '';
-    const actualNote = actual > 0
-      ? `<span style="font-size:11px;color:#6b7280;margin-left:4px;">(actual: ${fmt(actual)})</span>`
-      : '';
     return `<div class="exp-item" style="align-items:center;">
-      <span style="font-size:15px;margin-right:4px;">${catIcon(cat)}</span>
-      <span class="exp-name" style="flex:1;font-size:14px;color:#1e293b;padding:4px 2px;">${esc(cat)}</span>
-      <span class="tracked-pill" onclick="switchView('spending')" title="Click to log spending">💸</span>
+      <input class="exp-name" type="text" value="${esc(cat)}" placeholder="Category name"
+        onblur="renameCategory('${esc(cat)}', this.value)"
+        onkeydown="if(event.key==='Enter')this.blur()">
       <span class="exp-symbol">$</span>
       <input class="exp-amount" type="number" min="0" value="${actual > 0 ? actual : (budgeted || '')}" placeholder="0"
-        ${actual > 0 ? 'readonly style="background:#f8fafc;color:#6b7280;"' : ''}
+        ${actual > 0 ? 'readonly style="background:#f8fafc;color:#6b7280;cursor:not-allowed;" title="Actual spending from Spending tab"' : ''}
         oninput="updateTrackedBudget('${esc(cat)}', this.value)">
+      <button class="del-btn" onclick="deleteCategory('${esc(cat)}')" title="Remove category">×</button>
     </div>`;
   }).join('');
 }
