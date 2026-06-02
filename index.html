@@ -1340,7 +1340,7 @@ function renderList(id, items, type) {
     <li class="exp-item">
       <input class="exp-name" type="text" value="${esc(item.name)}" placeholder="Expense name"
         oninput="updateItem('${type}', ${i}, 'name', this.value)"
-        onblur="syncItemNameToCategory('${type}', ${i})">
+        onblur="updateCategoryDropdown()">
       <span class="exp-symbol">$</span>
       <input class="exp-amount" type="number" min="0" value="${item.amount || ''}" placeholder="0"
         oninput="updateItem('${type}', ${i}, 'amount', this.value); renderCalc()">
@@ -1359,20 +1359,6 @@ function updateItem(type, i, field, val) {
   persist();
 }
 
-// Called on blur — syncs the finalised name to trackedCategories for Spending tab.
-// Only ADDS names; never removes. Removals happen only in removeItem().
-// This prevents accidentally wiping categories added via the Spending tab.
-function syncItemNameToCategory(type, i) {
-  if (type !== 'variable') return;
-  const list = state.variable;
-  if (!list[i]) return;
-  const newName = list[i].name.trim();
-  if (newName && !trackedCategories.includes(newName)) {
-    trackedCategories.push(newName);
-    saveCategories();
-    updateCategoryDropdown();
-  }
-}
 
 function addExpense(type) {
   const list = type === 'fixed' ? state.fixed : state.variable;
@@ -1388,23 +1374,11 @@ function addExpense(type) {
 
 function removeItem(type, i) {
   const list = type === 'fixed' ? state.fixed : state.variable;
-  // Remove this item's name from trackedCategories only if:
-  // (a) it's not a default category, AND
-  // (b) no other variable item shares the same name
-  if (type === 'variable') {
-    const name = list[i].name.trim();
-    if (name && !DEFAULT_CATS.includes(name)) {
-      const otherHasName = list.some((e, j) => j !== i && e.name.trim() === name);
-      if (!otherHasName) {
-        trackedCategories = trackedCategories.filter(c => c !== name);
-        saveCategories();
-        updateCategoryDropdown();
-      }
-    }
-  }
   list.splice(i, 1);
   persist();
   render();
+  // Rebuild dropdown so deleted variable items disappear from Spending
+  if (type === 'variable') updateCategoryDropdown();
 }
 
 function addCategory(name) {
@@ -1433,10 +1407,13 @@ function updateCategoryDropdown() {
   const sel = document.getElementById('tx-category');
   if (!sel) return;
   const prev = sel.value;
-  sel.innerHTML = trackedCategories.map(c =>
+  // Include tracked categories + any named manual variable items (no duplicates)
+  const varNames = (state?.variable || []).map(e => e.name.trim()).filter(n => n && !trackedCategories.includes(n));
+  const allCats = [...trackedCategories, ...varNames];
+  sel.innerHTML = allCats.map(c =>
     `<option value="${esc(c)}">${catIcon(c)} ${esc(c)}</option>`
   ).join('');
-  if (trackedCategories.includes(prev)) sel.value = prev;
+  if (allCats.includes(prev)) sel.value = prev;
 }
 
 function switchView(view) {
