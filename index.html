@@ -1365,16 +1365,16 @@ function renameCategory(oldName, newName) {
   renderCalc();
 }
 
-function openEmojiPicker(catIdx) {
+function openEmojiPickerById(id) {
   closeAllEmojiPickers();
-  const picker = document.getElementById(`ep-${catIdx}`);
+  const picker = document.getElementById(id);
   if (picker) picker.style.display = 'flex';
 }
 function closeAllEmojiPickers() {
   document.querySelectorAll('.emoji-picker').forEach(p => p.style.display = 'none');
 }
-function selectEmoji(catIdx, emoji) {
-  const cat = trackedCategories[catIdx];
+// Generic: select emoji by category name (works from both Budget and Spending tabs)
+function selectEmoji(cat, emoji) {
   if (!cat) return;
   catEmojis[cat] = emoji;
   saveCatEmojis();
@@ -1390,13 +1390,14 @@ function renderTrackedRows() {
   el.innerHTML = trackedCategories.map((cat, catIdx) => {
     const actual   = txTotal(cat);
     const budgeted = trackedBudgets?.[cat] ?? '';
+    const pickerId = `ep-${catIdx}`;
     const emojiOpts = EMOJI_LIST.map(e =>
-      `<span class="emoji-opt" onclick="event.stopPropagation();selectEmoji(${catIdx},'${e}')">${e}</span>`
+      `<span class="emoji-opt" onclick="event.stopPropagation();selectEmoji('${esc(cat)}','${e}')">${e}</span>`
     ).join('');
     return `<div class="exp-item" style="align-items:center;position:relative;">
       <div class="emoji-picker-wrap">
-        <button class="emoji-btn" onclick="openEmojiPicker(${catIdx})" title="Change emoji">${catIcon(cat)}</button>
-        <div class="emoji-picker" id="ep-${catIdx}" style="display:none;">${emojiOpts}</div>
+        <button class="emoji-btn" onclick="openEmojiPickerById('${pickerId}')" title="Change emoji">${catIcon(cat)}</button>
+        <div class="emoji-picker" id="${pickerId}" style="display:none;">${emojiOpts}</div>
       </div>
       <input class="exp-name" type="text" value="${esc(cat)}" placeholder="Category name"
         onblur="renameCategory('${esc(cat)}', this.value)"
@@ -1558,7 +1559,7 @@ function renderSpending() {
   // Category totals — same combined list as the dropdown
   const varNames = (state?.variable || []).map(e => e.name.trim()).filter(n => n && !trackedCategories.includes(n));
   const allCats = [...trackedCategories, ...varNames];
-  const catHTML = allCats.map(cat => {
+  const catHTML = allCats.map((cat, si) => {
     const catTx = monthTx.filter(t => t.category === cat);
     const total = catTx.reduce((s, t) => s + t.amount, 0);
     const isTracked = trackedCategories.includes(cat);
