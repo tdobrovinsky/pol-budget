@@ -1895,6 +1895,31 @@ function parseCsv(text) {
       }
     }
   });
+  // Positional fallback: header row had no recognisable columns — scan first data row
+  if (colIdx.date === -1 || colIdx.amount === -1) {
+    const MONTH_RE = /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\b/i;
+    const DATE_RE  = /\d{4}-\d{2}-\d{2}|\d{1,2}\/\d{1,2}\/\d{4}/;
+    const AMT_RE   = /^[A-Z]{1,3}\$?[0-9,]+\.?[0-9]*$|^\$[0-9,]+\.?[0-9]*$|^[0-9,]+\.[0-9]+$/i;
+    for (let pi = 1; pi < Math.min(lines.length, 6); pi++) {
+      const pf = parseRow(lines[pi]);
+      if (pf.length < 2 || pf.every(x => !x.trim())) continue;
+      for (let pj = 0; pj < pf.length; pj++) {
+        const pv = pf[pj].trim();
+        if (!pv) continue;
+        if (colIdx.date   === -1 && (MONTH_RE.test(pv) || DATE_RE.test(pv))) colIdx.date   = pj;
+        else if (colIdx.amount === -1 && AMT_RE.test(pv.replace(/[()]/g, ''))) colIdx.amount = pj;
+      }
+      if (colIdx.date !== -1 && colIdx.amount !== -1) {
+        // Assign remaining text cols: before amount → note, after amount → category
+        for (let pj = 0; pj < pf.length; pj++) {
+          if (pj === colIdx.date || pj === colIdx.amount || !pf[pj].trim()) continue;
+          if (pj < colIdx.amount  && colIdx.note     === -1) colIdx.note     = pj;
+          else if (pj > colIdx.amount && colIdx.category === -1) colIdx.category = pj;
+        }
+        break;
+      }
+    }
+  }
   if (colIdx.date === -1 || colIdx.amount === -1) return { rows: [], warnings: ['Could not find required date and amount columns.'] };
 
   function parseDate(raw) {
@@ -1917,7 +1942,11 @@ function parseCsv(text) {
   }
 
   function parseAmount(raw) {
-    const s = raw.trim().replace(/[$,\s]/g, '').replace(/\(([0-9.]+)\)/, '-$1');
+    let s = raw.trim();
+    // Handle accounting notation: (CA$1,234.56) → treat as positive
+    if (/^\(.*\)$/.test(s)) s = s.slice(1, -1);
+    // Strip everything except digits and decimal point (handles CA$, $, commas, spaces, currency codes)
+    s = s.replace(/[^0-9.]/g, '');
     const n = parseFloat(s);
     return isNaN(n) ? null : Math.abs(Math.round(n * 100) / 100);
   }
