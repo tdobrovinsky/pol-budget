@@ -1399,13 +1399,14 @@ function openEmojiPickerById(id) {
 function closeAllEmojiPickers() {
   document.querySelectorAll('.emoji-picker').forEach(p => p.style.display = 'none');
 }
-// Generic: select emoji by category name (works from both Budget and Spending tabs)
+// Generic: select emoji by category name (works from Budget and Spending tabs)
 function selectEmoji(cat, emoji) {
   if (!cat) return;
   catEmojis[cat] = emoji;
   saveCatEmojis();
   closeAllEmojiPickers();
   renderTrackedRows();
+  renderList('variableList', state.variable, 'variable');
   updateCategoryDropdown();
   if (currentView === 'spending') renderSpending();
 }
@@ -1438,17 +1439,29 @@ function renderTrackedRows() {
 }
 
 function renderList(id, items, type) {
-  document.getElementById(id).innerHTML = items.map((item, i) => `
-    <li class="exp-item">
-      <input class="exp-name" type="text" value="${esc(item.name)}" placeholder="Expense name"
+  document.getElementById(id).innerHTML = items.map((item, i) => {
+    const pickerId = `vp-${type}-${i}`;
+    const emojiSection = type === 'variable' ? (() => {
+      const nm = item.name.trim();
+      const emojiOpts = EMOJI_LIST.map(e =>
+        `<span class="emoji-opt" onclick="event.stopPropagation();selectEmoji(document.getElementById('vp-name-${i}').value.trim(),'${e}')">${e}</span>`
+      ).join('');
+      return `<div class="emoji-picker-wrap" style="flex-shrink:0;">
+        <button class="emoji-btn" onclick="openEmojiPickerById('${pickerId}')" title="Change emoji">${nm ? catIcon(nm) : '📦'}</button>
+        <div class="emoji-picker" id="${pickerId}" style="display:none;">${emojiOpts}</div>
+      </div>`;
+    })() : '';
+    return `<li class="exp-item">
+      ${emojiSection}
+      <input id="vp-name-${i}" class="exp-name" type="text" value="${esc(item.name)}" placeholder="Expense name"
         oninput="updateItem('${type}', ${i}, 'name', this.value)"
-        onblur="updateCategoryDropdown()">
+        onblur="updateCategoryDropdown(); renderList('variableList', state.variable, 'variable');">
       <span class="exp-symbol">$</span>
       <input class="exp-amount" type="number" min="0" value="${item.amount || ''}" placeholder="0"
         oninput="updateItem('${type}', ${i}, 'amount', this.value); renderCalc()">
       <button class="del-btn" onclick="removeItem('${type}', ${i})" title="Remove">×</button>
-    </li>
-  `).join('');
+    </li>`;
+  }).join('');
 }
 
 function updateItem(type, i, field, val) {
@@ -1589,11 +1602,18 @@ function renderSpending() {
     const catTx = monthTx.filter(t => t.category === cat);
     const total = catTx.reduce((s, t) => s + t.amount, 0);
     const isTracked = trackedCategories.includes(cat);
-    return `<div class="cat-row">
+    const spPickerId = `sp-${si}`;
+    const emojiOpts = EMOJI_LIST.map(e =>
+      `<span class="emoji-opt" onclick="event.stopPropagation();selectEmoji('${esc(cat)}','${e}')">${e}</span>`
+    ).join('');
+    return `<div class="cat-row" style="position:relative;">
+      <div class="emoji-picker-wrap" style="flex-shrink:0;margin-right:6px;">
+        <button class="emoji-btn" onclick="openEmojiPickerById('${spPickerId}')" title="Change emoji">${catIcon(cat)}</button>
+        <div class="emoji-picker" id="${spPickerId}" style="display:none;">${emojiOpts}</div>
+      </div>
       <div style="flex:1;">
-        <span class="cat-icon">${catIcon(cat)}</span>
         <span class="cat-name">${esc(cat)}</span>
-        <div class="cat-count" style="margin-top:2px;padding-left:28px;">${catTx.length} transaction${catTx.length !== 1 ? 's' : ''}</div>
+        <div class="cat-count" style="margin-top:2px;">${catTx.length} transaction${catTx.length !== 1 ? 's' : ''}</div>
       </div>
       <span class="cat-total" style="color:${catColor(cat)};margin-right:8px;">${fmt(total)}</span>
       ${isTracked ? `<button onclick="deleteCategory('${esc(cat)}')" title="Remove category"
