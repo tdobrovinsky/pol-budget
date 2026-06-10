@@ -218,7 +218,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .csv-import-btn { background: none; border: 1px solid #e2e8f0; color: #64748b; padding: 6px 12px; border-radius: 6px; font-size: 12px; cursor: pointer; transition: border-color .15s, color .15s; }
 .csv-import-btn:hover { border-color: #3b82f6; color: #3b82f6; }
 .import-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 3000; display: flex; align-items: center; justify-content: center; padding: 20px; }
-.import-modal { background: white; border-radius: 14px; width: 100%; max-width: 720px; max-height: 85vh; display: flex; flex-direction: column; box-shadow: 0 30px 80px rgba(0,0,0,.25); }
+.import-modal { background: white; border-radius: 14px; width: 100%; max-width: 800px; max-height: 85vh; display: flex; flex-direction: column; box-shadow: 0 30px 80px rgba(0,0,0,.25); }
 .import-modal-hdr { padding: 20px 24px 16px; border-bottom: 1px solid #f1f5f9; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
 .import-modal-hdr h3 { font-size: 16px; font-weight: 700; color: #1e293b; margin: 0; }
 .import-modal-body { overflow-y: auto; padding: 16px 24px; flex: 1; }
@@ -231,6 +231,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .ir-note { font-size: 12px; color: #6b7280; flex: 1; }
 .ir-amt  { font-size: 13px; font-weight: 700; color: #1e293b; min-width: 70px; text-align: right; }
 .ir-dup-badge { font-size: 10px; background: #fef08a; color: #854d0e; padding: 1px 6px; border-radius: 8px; font-weight: 600; white-space: nowrap; }
+.ir-cat-sel { font-size: 13px; font-weight: 600; border: 1px solid #e2e8f0; border-radius: 6px; padding: 3px 6px; background: white; color: #374151; min-width: 115px; max-width: 155px; cursor: pointer; }
+.ir-cat-sel:focus { outline: none; border-color: #3b82f6; }
 .import-warn { background: #fff7ed; border: 1px solid #fed7aa; border-radius: 8px; padding: 10px 14px; font-size: 13px; color: #9a3412; margin-bottom: 12px; }
 /* Toast */
 .budget-toast { position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%) translateY(20px); background: #1e293b; color: #fff; padding: 10px 20px; border-radius: 20px; font-size: 13px; font-weight: 500; z-index: 4000; opacity: 0; pointer-events: none; transition: opacity .25s, transform .25s; white-space: nowrap; }
@@ -2011,15 +2013,22 @@ function openImportPreview(rows, warnings) {
     ? `<div class="import-warn">⚠️ ${warnings.length} row(s) were skipped: ${warnings.map(w => `<br>• ${esc(w)}`).join('')}</div>`
     : '';
 
-  const rowsHtml = rowsWithDups.map((r, idx) => `
+  const rowsHtml = rowsWithDups.map((r, idx) => {
+    const allCats = [...new Set([...DEFAULT_CATS, ...trackedCategories, r.category].filter(Boolean))].sort();
+    const catOptsHtml = allCats.map(c => `<option value="${esc(c)}"${c === r.category ? ' selected' : ''}>${esc(c)}</option>`).join('');
+    return `
     <div class="import-row ${r.isDup ? 'dup' : 'ok'}">
       <input type="checkbox" id="ir-${idx}" ${r.isDup ? '' : 'checked'} style="flex-shrink:0;">
       <span class="ir-date">${esc(r.date)}</span>
-      <span class="ir-cat" style="color:${catColor(r.category)};">${catIcon(r.category)} ${esc(r.category)}</span>
+      <div class="emoji-picker-wrap" style="flex-shrink:0;">
+        <button class="emoji-btn" onclick="openImportEmojiPicker(${idx},this)" title="Change emoji">${catIcon(r.category || '')}</button>
+      </div>
+      <select class="ir-cat-sel" onchange="importRowChangeCategory(${idx},this.value)">${catOptsHtml}</select>
       <span class="ir-note">${esc(r.note)}</span>
       <span class="ir-amt">$${r.amount.toFixed(2)}</span>
       ${r.isDup ? '<span class="ir-dup-badge">possible duplicate</span>' : ''}
-    </div>`).join('');
+    </div>`;
+  }).join('');
 
   const html = `
     <div class="import-modal-overlay" id="importModal" onclick="if(event.target===this)closeImportModal()">
@@ -2054,9 +2063,57 @@ function importToggleAll(state) {
   document.querySelectorAll('#importModal input[type=checkbox]').forEach(cb => cb.checked = state);
 }
 
+// Opens a fixed-position emoji picker for an import row (avoids overflow clipping)
+function openImportEmojiPicker(idx, btn) {
+  closeAllEmojiPickers();
+  let p = document.getElementById('impFloatPicker');
+  if (!p) {
+    p = document.createElement('div');
+    p.id = 'impFloatPicker';
+    p.className = 'emoji-picker';
+    p.style.cssText = 'position:fixed;z-index:9999;';
+    p.onclick = e => e.stopPropagation(); // prevent document click from closing it
+    document.body.appendChild(p);
+  }
+  p.innerHTML = EMOJI_LIST.map(e =>
+    `<span class="emoji-opt" onclick="importRowSelectEmoji(${idx},'${e}')">${e}</span>`
+  ).join('');
+  const rect = btn.getBoundingClientRect();
+  p.style.left = Math.min(rect.left, window.innerWidth - 230) + 'px';
+  p.style.top  = (rect.bottom + 4) + 'px';
+  p.style.display = 'flex';
+}
+
+function importRowChangeCategory(idx, newCat) {
+  if (!window._importRows) return;
+  window._importRows[idx].category = newCat;
+  // Refresh the emoji button face to show the new category's icon
+  const row = document.querySelector(`#ir-${idx}`)?.closest('.import-row');
+  const btn = row?.querySelector('.emoji-picker-wrap .emoji-btn');
+  if (btn) btn.textContent = catIcon(newCat);
+}
+
+function importRowSelectEmoji(idx, emoji) {
+  const cat = window._importRows?.[idx]?.category;
+  if (!cat) return;
+  catEmojis[cat] = emoji;
+  saveCatEmojis();
+  closeAllEmojiPickers();
+  // Refresh the emoji button in this import row
+  const row = document.querySelector(`#ir-${idx}`)?.closest('.import-row');
+  const btn = row?.querySelector('.emoji-picker-wrap .emoji-btn');
+  if (btn) btn.textContent = emoji;
+  // Refresh other rendered views that show this category
+  renderTrackedRows();
+  renderList('variableList', state.variable, 'variable');
+  if (currentView === 'spending') renderSpending();
+}
+
 function closeImportModal() {
   const el = document.getElementById('importModal');
   if (el) el.remove();
+  const fp = document.getElementById('impFloatPicker');
+  if (fp) fp.remove();
   window._importRows = null;
 }
 
