@@ -1874,16 +1874,27 @@ function parseCsv(text) {
     category: ['category', 'cat', 'type', 'payee', 'description', 'merchant', 'memo'],
     note:     ['note', 'notes', 'memo', 'description', 'reference', 'detail', 'comment'],
   };
+  // Pass 1 — exact matches (column name is exactly an alias)
   headers.forEach((h, i) => {
     for (const [col, names] of Object.entries(aliases)) {
-      if (colIdx[col] === -1 && names.some(n => h.includes(n))) {
-        // give priority to exact matches over 'note' catching 'description' if category already did
+      if (colIdx[col] === -1 && names.includes(h)) {
         colIdx[col] = i;
+        break; // one column → one field only
       }
     }
   });
-  // Resolve conflict: if both category and note map to same index (e.g. 'description'), give category priority
-  if (colIdx.category !== -1 && colIdx.note === colIdx.category) colIdx.note = -1;
+  // Pass 2 — substring matches for fields still unassigned; skip columns already claimed
+  const claimedCols = new Set(Object.values(colIdx).filter(v => v !== -1));
+  headers.forEach((h, i) => {
+    if (claimedCols.has(i)) return; // already claimed by pass 1
+    for (const [col, names] of Object.entries(aliases)) {
+      if (colIdx[col] === -1 && names.some(n => h.includes(n))) {
+        colIdx[col] = i;
+        claimedCols.add(i);
+        break; // one column → one field only
+      }
+    }
+  });
   if (colIdx.date === -1 || colIdx.amount === -1) return { rows: [], warnings: ['Could not find required date and amount columns.'] };
 
   function parseDate(raw) {
