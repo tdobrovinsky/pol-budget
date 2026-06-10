@@ -1871,8 +1871,8 @@ function parseCsv(text) {
   const aliases = {
     date:     ['date', 'transactiondate', 'txdate', 'posteddate', 'valuedate', 'day'],
     amount:   ['amount', 'amt', 'value', 'debit', 'credit', 'total', 'price', 'cost', 'sum'],
-    category: ['category', 'cat', 'type', 'payee', 'description', 'merchant', 'memo'],
-    note:     ['note', 'notes', 'memo', 'description', 'reference', 'detail', 'comment'],
+    category: ['category', 'cat', 'type', 'payee', 'merchant', 'memo'],
+    note:     ['note', 'notes', 'description', 'memo', 'reference', 'detail', 'comment', 'narrative', 'particulars'],
   };
   // Pass 1 — exact matches (column name is exactly an alias)
   headers.forEach((h, i) => {
