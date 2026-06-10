@@ -214,6 +214,20 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .tx-del-btn:hover { color: #ef4444; }
 .tx-empty { text-align: center; padding: 40px 0; color: #94a3b8; font-size: 14px; }
 
+/* Transaction filter bar */
+.tx-filter-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px 12px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 10px; }
+.tx-filter-bar label { font-size: 11px; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: .04em; }
+.tx-filter-sel { font-size: 13px; border: 1px solid #e2e8f0; border-radius: 6px; padding: 4px 8px; background: white; color: #374151; cursor: pointer; }
+.tx-filter-sel:focus { outline: none; border-color: #3b82f6; }
+.tx-filter-group { display: flex; align-items: center; gap: 5px; }
+.tx-filter-group span { font-size: 12px; color: #94a3b8; }
+.tx-filter-inp { font-size: 12px; border: 1px solid #e2e8f0; border-radius: 6px; padding: 4px 7px; width: 115px; background: white; color: #374151; }
+.tx-filter-inp-sm { font-size: 12px; border: 1px solid #e2e8f0; border-radius: 6px; padding: 4px 7px; width: 72px; background: white; color: #374151; }
+.tx-filter-inp:focus, .tx-filter-inp-sm:focus { outline: none; border-color: #3b82f6; }
+.tx-filter-clear { margin-left: auto; font-size: 12px; background: #fee2e2; color: #ef4444; border: none; border-radius: 6px; padding: 4px 10px; cursor: pointer; font-weight: 600; white-space: nowrap; }
+.tx-filter-clear:hover { background: #fecaca; }
+.tx-filter-count { margin-left: auto; font-size: 12px; color: #6b7280; white-space: nowrap; }
+
 /* CSV Import */
 .csv-import-btn { background: none; border: 1px solid #e2e8f0; color: #64748b; padding: 6px 12px; border-radius: 6px; font-size: 12px; cursor: pointer; transition: border-color .15s, color .15s; }
 .csv-import-btn:hover { border-color: #3b82f6; color: #3b82f6; }
@@ -408,6 +422,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
     </div>
     <div class="spend-card">
       <h2>Transactions</h2>
+      <div id="txFilters"></div>
       <div id="txList"></div>
     </div>
   </div>
@@ -1030,6 +1045,19 @@ function saveCatEmojis() {
 let settings = loadSettings();
 let state = loadState();
 let transactions = loadTransactions();
+
+// ── Transaction filters (session-only, not persisted) ──────────────────────
+let txFilter = { category: '', dateFrom: '', dateTo: '', amountMin: '', amountMax: '' };
+
+function setTxFilter(key, val) {
+  txFilter[key] = val;
+  renderSpending();
+}
+
+function clearTxFilters() {
+  txFilter = { category: '', dateFrom: '', dateTo: '', amountMin: '', amountMax: '' };
+  renderSpending();
+}
 let trackedCategories = loadCategories();
 let trackedBudgets = loadTrackedBudgets(); // global — persists across months
 let catEmojis = loadCatEmojis();           // global — user emoji overrides per category
@@ -1638,20 +1666,79 @@ function renderSpending() {
   document.getElementById('catTotals').innerHTML =
     (catHTML || '<div style="color:#94a3b8;font-size:13px;padding:8px 0;">No categories yet</div>') + addCatForm;
 
-  // Transaction list
+  // ── Filter bar ──────────────────────────────────────────────────────────
+  const catOptsHtml = ['', ...allCats].map(c =>
+    `<option value="${esc(c)}"${c === txFilter.category ? ' selected' : ''}>${c ? esc(c) : 'All categories'}</option>`
+  ).join('');
+
+  const hasFilter = txFilter.category || txFilter.dateFrom || txFilter.dateTo ||
+                    txFilter.amountMin !== '' || txFilter.amountMax !== '';
+
+  document.getElementById('txFilters').innerHTML = `
+    <div class="tx-filter-bar">
+      <div class="tx-filter-group">
+        <label>Category</label>
+        <select class="tx-filter-sel" onchange="setTxFilter('category',this.value)">${catOptsHtml}</select>
+      </div>
+      <div class="tx-filter-group">
+        <label>Date</label>
+        <input type="date" class="tx-filter-inp" value="${txFilter.dateFrom}"
+          onchange="setTxFilter('dateFrom',this.value)" title="From date">
+        <span>–</span>
+        <input type="date" class="tx-filter-inp" value="${txFilter.dateTo}"
+          onchange="setTxFilter('dateTo',this.value)" title="To date">
+      </div>
+      <div class="tx-filter-group">
+        <label>Amount $</label>
+        <input type="number" class="tx-filter-inp-sm" value="${txFilter.amountMin}"
+          min="0" step="0.01" placeholder="Min"
+          onchange="setTxFilter('amountMin',this.value)" title="Minimum amount">
+        <span>–</span>
+        <input type="number" class="tx-filter-inp-sm" value="${txFilter.amountMax}"
+          min="0" step="0.01" placeholder="Max"
+          onchange="setTxFilter('amountMax',this.value)" title="Maximum amount">
+      </div>
+      ${hasFilter ? `<button class="tx-filter-clear" onclick="clearTxFilters()">✕ Clear</button>` : ''}
+    </div>`;
+
+  // ── Apply filters to build the visible list ─────────────────────────────
+  let filteredTx = monthTx;
+  if (txFilter.category)     filteredTx = filteredTx.filter(t => t.category === txFilter.category);
+  if (txFilter.dateFrom)     filteredTx = filteredTx.filter(t => t.date >= txFilter.dateFrom);
+  if (txFilter.dateTo)       filteredTx = filteredTx.filter(t => t.date <= txFilter.dateTo);
+  if (txFilter.amountMin !== '') filteredTx = filteredTx.filter(t => t.amount >= parseFloat(txFilter.amountMin));
+  if (txFilter.amountMax !== '') filteredTx = filteredTx.filter(t => t.amount <= parseFloat(txFilter.amountMax));
+
+  // ── Transaction list ────────────────────────────────────────────────────
   if (monthTx.length === 0) {
     document.getElementById('txList').innerHTML = `<div class="tx-empty">No transactions for ${MONTHS[viewMonth]}.<br>Add one above to get started.</div>`;
+    return;
+  }
+  if (filteredTx.length === 0) {
+    const total = hasFilter
+      ? `<span class="tx-filter-count">${monthTx.length} total</span>` : '';
+    document.getElementById('txList').innerHTML =
+      `<div class="tx-empty">No transactions match the current filter.${total ? '<br><small>' + monthTx.length + ' transaction' + (monthTx.length !== 1 ? 's' : '') + ' this month</small>' : ''}</div>`;
     return;
   }
 
   // Group by date
   const byDate = {};
-  monthTx.forEach(t => { (byDate[t.date] = byDate[t.date] || []).push(t); });
+  filteredTx.forEach(t => { (byDate[t.date] = byDate[t.date] || []).push(t); });
 
   const fmtDate = (d) => {
     const [y, m, day] = d.split('-');
     return new Date(+y, +m - 1, +day).toLocaleDateString('en-CA', { weekday: 'short', month: 'short', day: 'numeric' });
   };
+
+  // Summary line when filtered
+  let summaryHtml = '';
+  if (hasFilter) {
+    const filteredTotal = filteredTx.reduce((s, t) => s + t.amount, 0);
+    summaryHtml = `<div style="font-size:12px;color:#6b7280;padding:2px 4px 8px;text-align:right;">
+      Showing ${filteredTx.length} of ${monthTx.length} transaction${monthTx.length !== 1 ? 's' : ''} · ${fmt(filteredTotal)}
+    </div>`;
+  }
 
   const listHTML = Object.entries(byDate).map(([date, txs]) => {
     const dayTotal = txs.reduce((s, t) => s + t.amount, 0);
@@ -1672,7 +1759,7 @@ function renderSpending() {
     </div>`;
   }).join('');
 
-  document.getElementById('txList').innerHTML = listHTML;
+  document.getElementById('txList').innerHTML = summaryHtml + listHTML;
 }
 
 function changeMonth(delta) {
@@ -1684,6 +1771,8 @@ function changeMonth(delta) {
   // Reset tx date field so it defaults to the new month
   const dateEl = document.getElementById('tx-date');
   if (dateEl) dateEl.value = '';
+  // Reset filters when navigating months (date filters would be stale)
+  txFilter = { category: '', dateFrom: '', dateTo: '', amountMin: '', amountMax: '' };
   render();
   if (currentView === 'spending') renderSpending();
 }
